@@ -2,8 +2,9 @@
 /**
  * ITPMS — Manager Overview (read-only dashboard)
  * ------------------------------------------------------------------
- * Drop this file next to index.php. It reuses the same JSON API
- * (index.php?api=1) for both the initial data and live refreshes.
+ * Drop this file next to index.php. It has its own small read-only
+ * API (manager.php?api=1) for the initial data and live refreshes,
+ * so it works with no login at all.
  *
  * No create/edit/delete controls live here — view only. Layout adapts
  * to phone / tablet / laptop / desktop: a stacked card list on narrow
@@ -12,15 +13,54 @@
  * phones with many projects it gracefully allows scrolling instead of
  * shrinking text past readability.
  *
- * Requires login just like index.php — this is a viewer role in
- * practice (no write controls are rendered) but shares the same
- * account system since ITPMS has no per-role permissions yet.
+ * Intentionally NOT gated by login — this is the view meant to be
+ * shared with managers/stakeholders who don't need an account. It
+ * still reuses auth.php for the DB connection, just without calling
+ * require_login().
  */
 
 require_once __DIR__ . '/auth.php';
-require_login();
+
+function mgr_is_overdue(array $p): bool {
+    if (empty($p['end_date'])) return false;
+    if (in_array($p['status'], ['Completed', 'Cancelled'], true)) return false;
+    return $p['end_date'] < date('Y-m-d');
+}
+
+/* Public, read-only API for this page's own refresh/view-modal calls — no
+   login required, and no write verbs (POST/PUT/DELETE) exist here at all. */
+if (isset($_GET['api'])) {
+    header('Content-Type: application/json');
+    $id = isset($_GET['id']) ? trim($_GET['id']) : null;
+
+    if ($id) {
+        $stmt = $pdo->prepare("SELECT * FROM projects WHERE id = ?");
+        $stmt->execute([$id]);
+        $project = $stmt->fetch();
+        if (!$project) { http_response_code(404); die(json_encode(['error' => 'Project not found.'])); }
+
+        $hist = $pdo->prepare("SELECT entry_date AS date, progress FROM progress_history WHERE project_id = ? ORDER BY entry_date ASC");
+        $hist->execute([$id]);
+        $project['history']  = $hist->fetchAll();
+        $project['budget']   = (float) $project['budget'];
+        $project['progress'] = (int) $project['progress'];
+        $project['overdue']  = mgr_is_overdue($project);
+        echo json_encode($project);
+    } else {
+        $rows = $pdo->query("SELECT * FROM projects ORDER BY created_at ASC")->fetchAll();
+        foreach ($rows as &$r) {
+            $r['budget']   = (float) $r['budget'];
+            $r['progress'] = (int) $r['progress'];
+            $r['overdue']  = mgr_is_overdue($r);
+        }
+        echo json_encode($rows);
+    }
+    exit;
+}
 
 $projects = $pdo->query("SELECT * FROM projects ORDER BY created_at ASC")->fetchAll();
+foreach ($projects as &$p) { $p['overdue'] = mgr_is_overdue($p); }
+unset($p);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -343,7 +383,7 @@ async function openViewModal(id) {
   if (!p) return;
   let full;
   try {
-    const res = await fetch(`index.php?api=1&id=${encodeURIComponent(id)}`);
+    const res = await fetch(`manager.php?api=1&id=${encodeURIComponent(id)}`);
     full = await res.json();
   } catch (e) { full = { ...p, history: [] }; }
 
@@ -392,7 +432,7 @@ function closeViewModal() { document.getElementById('viewModalOverlay').classLis
 
 async function refresh() {
   try {
-    const res = await fetch('index.php?api=1');
+    const res = await fetch('manager.php?api=1');
     if (!res.ok) return;
     projects = await res.json();
     document.getElementById('lastUpdated').textContent = new Date().toLocaleTimeString();
