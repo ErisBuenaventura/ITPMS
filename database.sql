@@ -24,6 +24,27 @@ SET time_zone = "+00:00";
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `users`
+--
+-- NOTE: auth.php also creates this table automatically (CREATE TABLE IF
+-- NOT EXISTS) and seeds a default `admin` / `admin123` account the first
+-- time the app runs, so this block is optional — it's here so the schema
+-- is fully documented in one place. Change the default password via the
+-- "Change password" link in the sidebar right after your first login.
+--
+
+CREATE TABLE IF NOT EXISTS `users` (
+  `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `username` varchar(60) NOT NULL,
+  `password_hash` varchar(255) NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `username` (`username`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `projects`
 --
 
@@ -59,6 +80,29 @@ INSERT INTO `projects` (`id`, `name`, `status`, `progress`, `owner`, `priority`,
 ('PRJ-1008', 'Network setup', 'Onhold', 0, 'Eris', 'Low', NULL, NULL, 0.00, 'Plan to 1 PLDT network only with backup and wired connections', NULL, '2026-07-09 08:38:20', '2026-07-09 08:38:20'),
 ('PRJ-1009', 'Canary biometric wired internet connection', 'Not Started', 0, 'Eris', 'Low', NULL, NULL, 0.00, 'For internet speed to reach public IP', NULL, '2026-07-09 08:41:07', '2026-07-09 08:41:07'),
 ('PRJ-1010', 'Backup/Archive files', 'Ongoing', 1, 'ERIS', 'Medium', '2026-07-23', '2026-07-31', 0.00, 'Google drive for Backup/Archive files', 'https://docs.google.com/spreadsheets/d/1yhc5UYw9jlKnMupqqSNyXNnpzd1lNsePs7m1fZ3c4Dg/edit?usp=sharing', '2026-07-24 09:38:26', '2026-07-24 09:38:26');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `progress_history`
+--
+-- NOTE: this table was missing from the original dump even though
+-- api/projects.php (and index.php's built-in API) reads and writes
+-- it for the progress-trend chart — without it, creating or editing
+-- a project throws a "table doesn't exist" error. Added here so a
+-- fresh import of this file actually works end to end.
+--
+
+CREATE TABLE IF NOT EXISTS `progress_history` (
+  `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `project_id` varchar(20) NOT NULL,
+  `entry_date` date NOT NULL,
+  `progress` tinyint(3) UNSIGNED NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `project_date` (`project_id`,`entry_date`),
+  KEY `project_id` (`project_id`),
+  CONSTRAINT `progress_history_project_fk` FOREIGN KEY (`project_id`) REFERENCES `projects` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 --
 -- Indexes for dumped tables

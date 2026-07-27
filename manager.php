@@ -11,26 +11,14 @@
  * dashboard scales to fit one screen with no scrolling; on small
  * phones with many projects it gracefully allows scrolling instead of
  * shrinking text past readability.
+ *
+ * Requires login just like index.php — this is a viewer role in
+ * practice (no write controls are rendered) but shares the same
+ * account system since ITPMS has no per-role permissions yet.
  */
 
-define('DB_HOST', 'localhost');
-define('DB_NAME', 'itpms');
-define('DB_USER', 'root');
-define('DB_PASS', '');
-
-try {
-    $pdo = new PDO(
-        "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=utf8mb4",
-        DB_USER,
-        DB_PASS,
-        [
-            PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        ]
-    );
-} catch (PDOException $e) {
-    die('<h2 style="font-family:sans-serif">Database connection failed.</h2><p style="font-family:sans-serif">Check the DB_* constants at the top of manager.php.<br><small>' . htmlspecialchars($e->getMessage()) . '</small></p>');
-}
+require_once __DIR__ . '/auth.php';
+require_login();
 
 $projects = $pdo->query("SELECT * FROM projects ORDER BY created_at ASC")->fetchAll();
 ?>
@@ -98,6 +86,7 @@ table.mgr-table td { padding: 10px 18px; border-bottom: 1px solid #F2F3F5; verti
 table.mgr-table tbody tr:last-child td { border-bottom: none; }
 .proj-name { font-weight: 600; }
 .proj-id { font-size: 10.5px; color: #8A8F98; font-weight: 500; margin-left: 6px; }
+.overdue-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--cancelled); margin-left: 6px; vertical-align: middle; }
 
 .badge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
 .badge svg { width: 12px; height: 12px; }
@@ -240,6 +229,12 @@ function escapeHtml(str) {
   return String(str ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 }
 
+function isOverdue(p) {
+  if (p.overdue !== undefined) return !!p.overdue;
+  if (!p.end_date || ['Completed', 'Cancelled'].includes(p.status)) return false;
+  return p.end_date < new Date().toISOString().slice(0, 10);
+}
+
 function badgeHtml(status) {
   const cfg = STATUS_CONFIG[status] || STATUS_CONFIG['Not Started'];
   return `<span class="badge" style="background:${cfg.soft};color:${cfg.color}"><i data-lucide="${cfg.icon}"></i>${cfg.label}</span>`;
@@ -262,12 +257,16 @@ function render() {
   const counts = {}; STATUSES.forEach((s) => (counts[s] = 0));
   projects.forEach((p) => (counts[p.status] = (counts[p.status] || 0) + 1));
 
+  const overdueCount = projects.filter(isOverdue).length;
+
   document.getElementById('statGrid').innerHTML = STATUSES.map((s) => {
     const cfg = STATUS_CONFIG[s];
     return `<div class="stat-card" style="--c:${cfg.color};--s:${cfg.soft}">
       <div class="stat-count">${counts[s]}</div>
       <div class="stat-label">${cfg.label}</div></div>`;
-  }).join('');
+  }).join('') + `<div class="stat-card" style="--c:#C4483C;--s:#FBE7E5">
+      <div class="stat-count">${overdueCount}</div>
+      <div class="stat-label">Overdue</div></div>`;
 
   document.getElementById('projCount').textContent = projects.length;
 
@@ -275,7 +274,7 @@ function render() {
   document.getElementById('tableBody').innerHTML = projects.map((p, i) => `
     <tr>
       <td class="mono">${i + 1}</td>
-      <td><span class="proj-name">${escapeHtml(p.name)}</span><span class="proj-id mono">${p.id}</span></td>
+      <td><span class="proj-name">${escapeHtml(p.name)}</span>${isOverdue(p) ? '<span class="overdue-dot" title="Overdue"></span>' : ''}<span class="proj-id mono">${p.id}</span></td>
       <td>${escapeHtml(p.owner || '—')}</td>
       <td>${escapeHtml(p.priority)}</td>
       <td>${progressBarHtml(p.progress, p.status)}</td>
@@ -288,7 +287,7 @@ function render() {
   document.getElementById('cardList').innerHTML = projects.map((p) => `
     <div class="proj-card">
       <div class="proj-card-head">
-        <div><div class="proj-card-name">${escapeHtml(p.name)}</div><div class="proj-card-id mono">${p.id}</div></div>
+        <div><div class="proj-card-name">${escapeHtml(p.name)}${isOverdue(p) ? '<span class="overdue-dot" title="Overdue"></span>' : ''}</div><div class="proj-card-id mono">${p.id}</div></div>
         ${badgeHtml(p.status)}
       </div>
       <div class="proj-card-meta">
