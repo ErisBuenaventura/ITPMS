@@ -108,7 +108,7 @@ html, body { height: 100%; overflow: hidden; }
 .live-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--completed); margin-right: 5px; animation: pulse 1.6s infinite; }
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
 
-.fit-outer { flex: 1; min-height: 0; overflow: hidden; position: relative; }
+.fit-outer { flex: 1; min-height: 0; overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; position: relative; }
 .fit-inner { position: absolute; top: 0; left: 0; transform-origin: top left; }
 
 .stat-grid { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; }
@@ -119,8 +119,9 @@ html, body { height: 100%; overflow: hidden; }
 .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
 .panel-head { padding: 12px 20px; border-bottom: 1px solid #EDEFF3; font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 15px; }
 
-/* ---------- table (tablet / laptop / desktop) ---------- */
-table.mgr-table { border-collapse: collapse; width: 100%; }
+/* ---------- table (all screen sizes — scrolls horizontally when narrower than content) ---------- */
+.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+table.mgr-table { border-collapse: collapse; width: 100%; min-width: 720px; }
 table.mgr-table th { text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: #8A8F98; font-weight: 600; padding: 9px 18px; border-bottom: 1px solid #EDEFF3; white-space: nowrap; }
 table.mgr-table td { padding: 10px 18px; border-bottom: 1px solid #F2F3F5; vertical-align: middle; font-size: 13px; white-space: nowrap; }
 table.mgr-table tbody tr:last-child td { border-bottom: none; }
@@ -142,16 +143,6 @@ table.mgr-table tbody tr:last-child td { border-bottom: none; }
 .icon-btn:hover { background: #EDEFF3; color: var(--ink); }
 .icon-btn-disabled { opacity: .3; cursor: default; }
 .icon-btn-disabled:hover { background: transparent; color: var(--ink-soft); }
-
-/* ---------- card list (phone) ---------- */
-.card-list { display: none; flex-direction: column; gap: 10px; padding: 14px; overflow-y: auto; }
-.proj-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
-.proj-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
-.proj-card-name { font-weight: 600; font-size: 14px; }
-.proj-card-id { font-size: 10.5px; color: #8A8F98; font-weight: 500; }
-.proj-card-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--ink-soft); margin-bottom: 10px; }
-.proj-card-meta b { color: var(--ink); font-weight: 600; }
-.proj-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 
 /* ---------- view modal (progress chart, read-only) ---------- */
 .modal-overlay { position: fixed; inset: 0; background: rgba(27,36,48,0.45); backdrop-filter: blur(2px); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
@@ -179,14 +170,14 @@ table.mgr-table tbody tr:last-child td { border-bottom: none; }
   .view-details { border-right: none; border-bottom: 1px solid #EDEFF3; }
 }
 
-/* ---------- PHONE breakpoint: switch table -> cards, allow scroll ---------- */
+/* ---------- PHONE breakpoint: page scrolls vertically; the table itself
+   scrolls horizontally within .table-scroll (see above) so every column
+   stays reachable — no data is ever hidden on small screens. ---------- */
 @media (max-width: 680px) {
   html, body { height: auto; overflow: auto; }
   .page { height: auto; padding: 14px 14px 28px; }
   .fit-outer { overflow: visible; }
   .fit-inner { position: static; transform: none !important; width: 100%; }
-  .panel > div:not(.panel-head) { display: none; }
-  .card-list { display: flex; }
   .status-line { text-align: left; }
 }
 </style>
@@ -213,11 +204,12 @@ table.mgr-table tbody tr:last-child td { border-bottom: none; }
       <div class="stat-grid" id="statGrid"></div>
       <div class="panel">
         <div class="panel-head">All Projects (<span id="projCount"><?= count($projects) ?></span>)</div>
-        <table class="mgr-table">
-          <thead><tr><th>#</th><th>Project</th><th>Owner</th><th>Priority</th><th>Progress</th><th>Status</th><th>Files</th><th></th></tr></thead>
-          <tbody id="tableBody"></tbody>
-        </table>
-        <div class="card-list" id="cardList"></div>
+        <div class="table-scroll">
+          <table class="mgr-table">
+            <thead><tr><th>#</th><th>Project</th><th>Owner</th><th>Priority</th><th>Progress</th><th>Status</th><th>Files</th><th></th></tr></thead>
+            <tbody id="tableBody"></tbody>
+          </table>
+        </div>
       </div>
     </div>
   </div>
@@ -322,26 +314,6 @@ function render() {
       <td>${fileCellHtml(p)}</td>
       <td><div class="row-actions"><button class="icon-btn btn-view" title="View progress" data-id="${p.id}"><i data-lucide="eye"></i></button></div></td>
     </tr>`).join('') || `<tr><td colspan="8" style="text-align:center;color:#8A8F98;padding:24px 0">No projects yet.</td></tr>`;
-
-  // card list (phone)
-  document.getElementById('cardList').innerHTML = projects.map((p) => `
-    <div class="proj-card">
-      <div class="proj-card-head">
-        <div><div class="proj-card-name">${escapeHtml(p.name)}${isOverdue(p) ? '<span class="overdue-dot" title="Overdue"></span>' : ''}</div><div class="proj-card-id mono">${p.id}</div></div>
-        ${badgeHtml(p.status)}
-      </div>
-      <div class="proj-card-meta">
-        <span>Owner: <b>${escapeHtml(p.owner || '—')}</b></span>
-        <span>Priority: <b>${escapeHtml(p.priority)}</b></span>
-      </div>
-      <div class="proj-card-foot">
-        ${progressBarHtml(p.progress, p.status)}
-        <div class="row-actions">
-          ${fileCellHtml(p)}
-          <button class="icon-btn btn-view" title="View progress" data-id="${p.id}"><i data-lucide="eye"></i></button>
-        </div>
-      </div>
-    </div>`).join('') || `<div style="text-align:center;color:#8A8F98;padding:24px 0">No projects yet.</div>`;
 
   document.querySelectorAll('.btn-view').forEach((b) => b.addEventListener('click', () => openViewModal(b.dataset.id)));
 
