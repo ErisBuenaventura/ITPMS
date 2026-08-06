@@ -23,13 +23,13 @@ if (session_status() === PHP_SESSION_NONE) {
 
 /* ============================ CONFIG — EDIT THESE 4 LINES ============================ */
 define('DB_HOST', 'localhost');
-define('DB_NAME', 'itpms');
+define('DB_NAME', 'itpms2');
 define('DB_USER', 'root');
 define('DB_PASS', '');
 /* ======================================================================================= */
 
 function auth_fatal(string $message, string $detail = ''): void {
-    if (isset($_GET['api'])) {
+    if (isset($_GET['api']) || isset($_GET['requests_api'])) {
         http_response_code(500);
         header('Content-Type: application/json');
         die(json_encode(['error' => $message, 'detail' => $detail]));
@@ -72,6 +72,24 @@ try {
     auth_fatal('Could not set up the users table.', $e->getMessage());
 }
 
+try {
+    // Lightweight day-to-day request log (separate from `projects`) —
+    // see database.sql for the full write-up of why this exists.
+    $pdo->exec("CREATE TABLE IF NOT EXISTS it_requests (
+        id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        title VARCHAR(255) NOT NULL,
+        requester VARCHAR(150) DEFAULT '',
+        category ENUM('Hardware','Software','Account/Access','Network','Other') NOT NULL DEFAULT 'Other',
+        status ENUM('Open','In Progress','Done') NOT NULL DEFAULT 'Open',
+        notes TEXT DEFAULT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT current_timestamp(),
+        resolved_at TIMESTAMP NULL DEFAULT NULL,
+        PRIMARY KEY (id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+} catch (PDOException $e) {
+    auth_fatal('Could not set up the it_requests table.', $e->getMessage());
+}
+
 function current_user_id() {
     return $_SESSION['user_id'] ?? null;
 }
@@ -93,7 +111,7 @@ function is_logged_in(): bool {
 function require_login(): void {
     if (is_logged_in()) return;
 
-    if (isset($_GET['api'])) {
+    if (isset($_GET['api']) || isset($_GET['requests_api'])) {
         http_response_code(401);
         header('Content-Type: application/json');
         die(json_encode(['error' => 'Session expired. Please log in again.']));

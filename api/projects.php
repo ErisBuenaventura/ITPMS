@@ -1,7 +1,7 @@
 <?php
 /**
  * ITPMS — Projects API
- * A small REST-style endpoint consumed by assets/js/app.js via fetch()/AJAX.
+ * A small REST-style endpoint consumed by assets/js/dashboard.js via fetch()/AJAX.
  *
  *   GET    projects.php            -> list all projects (no history, for tables/cards)
  *   GET    projects.php?id=PRJ-1   -> single project + full progress history (for the view modal)

@@ -1,0 +1,126 @@
+* { box-sizing: border-box; }
+:root {
+  --bg: #F5F6F8; --surface: #FFFFFF; --ink: #1B2430; --ink-soft: #5B6472; --border: #DCE0E6;
+  --accent: #2F5D8A; --accent-soft: #E8EFF6;
+  --completed: #2F9E6B; --completed-soft: #E4F5EC;
+  --ongoing: #2F5D8A; --ongoing-soft: #E8EFF6;
+  --onhold: #D6A419; --onhold-soft: #FBF1DA;
+  --cancelled: #C4483C; --cancelled-soft: #FBE7E5;
+  --notstarted: #8A8F98; --notstarted-soft: #EEEFF1;
+}
+html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); font-family: 'Inter', sans-serif; -webkit-font-smoothing: antialiased; }
+.mono { font-family: 'IBM Plex Mono', monospace; }
+.view-hidden { display: none !important; }
+
+/* Desktop/laptop/tablet: no page scroll, dashboard scales to fit.
+   Phone: page scroll is allowed (see media query below) — a data
+   dashboard squeezed into a phone screen with no scroll at all
+   stops being readable, so phones get a normal scrolling list. */
+html, body { height: 100%; overflow: hidden; }
+
+.page { display: flex; flex-direction: column; height: 100vh; padding: 18px 26px; }
+
+.top-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; flex-shrink: 0; }
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand-mark { width: 32px; height: 32px; border-radius: 8px; background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center; font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 12px; flex-shrink: 0; }
+.brand-title { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: clamp(15px, 3vw, 18px); line-height: 1.1; }
+.brand-sub { font-size: 11.5px; color: var(--ink-soft); }
+.top-bar-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.read-only-badge { display: inline-flex; align-items: center; gap: 5px; background: var(--notstarted-soft); color: var(--ink-soft); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; padding: 5px 10px; border-radius: 999px; white-space: nowrap; }
+.read-only-badge svg { width: 12px; height: 12px; }
+.status-line { text-align: right; font-size: 11.5px; color: var(--ink-soft); white-space: nowrap; }
+.status-line b { color: var(--ink); }
+.live-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--completed); margin-right: 5px; animation: pulse 1.6s infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+
+.fit-outer { flex: 1; min-height: 0; overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; position: relative; }
+.fit-inner { position: absolute; top: 0; left: 0; transform-origin: top left; }
+
+.stat-grid { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; }
+.stat-card { --c: #2F5D8A; --s: #E8EFF6; background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--c); border-radius: 10px; padding: 12px 18px; flex: 1; min-width: 140px; }
+.stat-count { font-family: 'Space Grotesk', sans-serif; font-size: 24px; font-weight: 700; }
+.stat-label { font-size: 11.5px; color: var(--ink-soft); font-weight: 500; margin-top: 2px; }
+
+.panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.panel-head { padding: 12px 20px; border-bottom: 1px solid #EDEFF3; font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 15px; }
+
+/* ---------- two-column layout: projects (left) + employee IT concerns (right) ---------- */
+.mgr-columns { display: flex; gap: 16px; align-items: flex-start; }
+.mgr-col-left { flex: 1.6; min-width: 0; }
+.mgr-col-right { flex: 1; min-width: 0; }
+.req-requester { font-size: 11px; color: #8A8F98; }
+.req-date { white-space: nowrap; color: var(--ink-soft); font-size: 12px; }
+
+/* ---------- table (all screen sizes — scrolls horizontally when narrower than content) ---------- */
+.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+table.mgr-table { border-collapse: collapse; width: 100%; min-width: 720px; }
+table.mgr-table.mgr-table-compact { min-width: 480px; }
+table.mgr-table th { text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: #8A8F98; font-weight: 600; padding: 9px 18px; border-bottom: 1px solid #EDEFF3; white-space: nowrap; }
+table.mgr-table td { padding: 10px 18px; border-bottom: 1px solid #F2F3F5; vertical-align: middle; font-size: 13px; white-space: nowrap; }
+table.mgr-table tbody tr:last-child td { border-bottom: none; }
+table.mgr-table tbody tr { transition: background-color .1s; }
+table.mgr-table tbody tr:hover { background-color: #FAFBFC; }
+.panel { transition: box-shadow .15s; }
+.panel:hover { box-shadow: 0 4px 18px rgba(27,36,48,0.05); }
+.proj-name { font-weight: 600; }
+.proj-id { font-size: 10.5px; color: #8A8F98; font-weight: 500; margin-left: 6px; }
+.overdue-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--cancelled); margin-left: 6px; vertical-align: middle; }
+.empty-row { text-align: center; color: #8A8F98; padding: 24px 0 !important; }
+.empty-icon { display: block; width: 28px; height: 28px; margin: 0 auto 8px; color: #C7CBD3; }
+
+.badge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+.badge svg { width: 12px; height: 12px; }
+
+.pbar-wrap { display: flex; align-items: center; gap: 8px; width: 190px; }
+.pbar-track { position: relative; flex: 1; height: 7px; background: #EDEFF3; border-radius: 4px; }
+.pbar-fill { height: 100%; border-radius: 4px; }
+.pbar-value { font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 600; color: var(--ink-soft); width: 32px; text-align: right; }
+
+.row-actions { display: flex; align-items: center; gap: 2px; }
+.icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 7px; border: none; background: transparent; color: var(--ink-soft); cursor: pointer; text-decoration: none; transition: background .12s, color .12s; }
+.icon-btn svg { width: 15px; height: 15px; }
+.icon-btn:hover { background: #EDEFF3; color: var(--ink); }
+.icon-btn-disabled { opacity: .3; cursor: default; }
+.icon-btn-disabled:hover { background: transparent; color: var(--ink-soft); }
+
+/* ---------- view modal (progress chart, read-only) ---------- */
+.modal-overlay { position: fixed; inset: 0; background: rgba(27,36,48,0.45); backdrop-filter: blur(2px); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
+.modal-card { background: var(--surface); border-radius: 14px; width: min(760px, 100%); max-height: 90vh; box-shadow: 0 20px 60px rgba(27,36,48,0.25); display: flex; flex-direction: column; overflow: hidden; }
+.modal-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 16px 20px; border-bottom: 1px solid #EDEFF3; }
+.modal-head-left { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.modal-head-left h3 { font-family: 'Space Grotesk', sans-serif; font-size: 16px; font-weight: 600; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.modal-id { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #8A8F98; background: #F2F3F5; padding: 3px 7px; border-radius: 5px; flex-shrink: 0; }
+.view-grid { display: grid; grid-template-columns: 1.05fr 1fr; overflow-y: auto; }
+.view-details { padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; border-right: 1px solid #EDEFF3; }
+.detail-rows { display: flex; flex-direction: column; gap: 8px; }
+.detail-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; padding: 6px 0; border-bottom: 1px dashed #EDEFF3; }
+.detail-row span { color: #8A8F98; }
+.detail-row b { font-weight: 600; text-align: right; }
+.detail-desc { font-size: 13px; color: #4B5563; line-height: 1.5; margin: 0; }
+.view-chart { padding: 18px 20px; display: flex; flex-direction: column; height: 300px; }
+.view-chart-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #8A8F98; font-weight: 600; margin-bottom: 6px; }
+.view-chart canvas { flex: 1; width: 100% !important; height: 100% !important; }
+.btn-block { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; padding: 9px 16px; border-radius: 8px; border: none; font-size: 13.5px; font-weight: 600; cursor: pointer; background: #EDEFF3; color: var(--ink); text-decoration: none; }
+.btn-block:hover { background: #DCE0E6; }
+.btn-block svg { width: 15px; height: 15px; }
+
+@media (max-width: 720px) {
+  .view-grid { grid-template-columns: 1fr; }
+  .view-details { border-right: none; border-bottom: 1px solid #EDEFF3; }
+}
+
+@media (max-width: 960px) {
+  .mgr-columns { flex-direction: column; }
+}
+
+/* ---------- PHONE breakpoint: page scrolls vertically; the table itself
+   scrolls horizontally within .table-scroll (see above) so every column
+   stays reachable — no data is ever hidden on small screens. ---------- */
+@media (max-width: 680px) {
+  html, body { height: auto; overflow: auto; }
+  .page { height: auto; padding: 14px 14px 28px; }
+  .fit-outer { overflow: visible; }
+  .fit-inner { position: static; transform: none !important; width: 100%; }
+  .mgr-columns { flex-direction: column; }
+  .status-line { text-align: left; }
+}
