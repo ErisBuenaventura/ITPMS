@@ -1,0 +1,1 @@
+Place your PPTX template here with the exact filename:\nIT_DEPARTMENT_MANCOM_REPORT.pptx\n\nThen reload manager.php and click Export. If you prefer a different filename, tell me and I will update manager.php accordingly.

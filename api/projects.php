@@ -57,7 +57,7 @@ switch ($method) {
             $project = $stmt->fetch();
             if (!$project) fail(404, 'Project not found.');
 
-            $hist = $pdo->prepare("SELECT entry_date AS date, progress FROM progress_history WHERE project_id = ? ORDER BY entry_date ASC");
+            $hist = $pdo->prepare("SELECT entry_date AS date, progress, notes FROM progress_history WHERE project_id = ? ORDER BY entry_date ASC");
             $hist->execute([$id]);
             $project['history'] = $hist->fetchAll();
             $project['budget']  = (float) $project['budget'];
@@ -90,19 +90,38 @@ switch ($method) {
         $desc     = trim($data['description'] ?? '');
         $newId    = next_project_id($pdo);
 
-        $stmt = $pdo->prepare("INSERT INTO projects (id, name, status, progress, owner, priority, start_date, end_date, budget, description)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-        $stmt->execute([$newId, $name, $status, $progress, $owner, $priority, $start, $end, $budget, $desc]);
+        $notes = trim($data['notes'] ?? '');
+        $stmt = $pdo->prepare("INSERT INTO projects (id, name, status, progress, owner, priority, start_date, end_date, budget, description, notes)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        $stmt->execute([$newId, $name, $status, $progress, $owner, $priority, $start, $end, $budget, $desc, $notes ?: null]);
 
-        $h = $pdo->prepare("INSERT INTO progress_history (project_id, entry_date, progress) VALUES (?, ?, ?)");
-        $h->execute([$newId, today(), $progress]);
+        // If client supplied an explicit history array, upsert each entry. Otherwise insert today's point as before.
+        if (array_key_exists('history', $data) && is_array($data['history'])) {
+            $h2 = $pdo->prepare("INSERT INTO progress_history (project_id, entry_date, progress, notes) VALUES (?, ?, ?, ?)
+                                 ON DUPLICATE KEY UPDATE progress = VALUES(progress), notes = VALUES(notes)");
+            foreach ($data['history'] as $entry) {
+                if (!is_array($entry)) continue;
+                $entryDate = $entry['date'] ?? null;
+                $entryProg = isset($entry['progress']) ? (int) $entry['progress'] : null;
+                $entryNotes = isset($entry['notes']) ? trim($entry['notes']) : null;
+                if (!$entryDate || $entryProg === null) continue;
+                $entryProg = max(0, min(100, $entryProg));
+                try { $h2->execute([$newId, $entryDate, $entryProg, $entryNotes]); } catch (Throwable $e) { /* ignore invalid rows */ }
+            }
+        } else {
+            $h = $pdo->prepare("INSERT INTO progress_history (project_id, entry_date, progress, notes) VALUES (?, ?, ?, NULL)");
+            $h->execute([$newId, today(), $progress]);
+        }
 
         $stmt = $pdo->prepare("SELECT * FROM projects WHERE id = ?");
         $stmt->execute([$newId]);
         $project = $stmt->fetch();
         $project['budget'] = (float) $project['budget'];
         $project['progress'] = (int) $project['progress'];
-        $project['history'] = [['date' => today(), 'progress' => $progress]];
+
+        $hist = $pdo->prepare("SELECT entry_date AS date, progress, notes FROM progress_history WHERE project_id = ? ORDER BY entry_date ASC");
+        $hist->execute([$newId]);
+        $project['history'] = $hist->fetchAll();
 
         http_response_code(201);
         echo json_encode($project);
@@ -128,12 +147,13 @@ switch ($method) {
         $budget   = isset($data['budget']) ? (float) $data['budget'] : (float) $existing['budget'];
         $desc     = trim($data['description'] ?? $existing['description']);
 
-        $stmt = $pdo->prepare("UPDATE projects SET name=?, status=?, progress=?, owner=?, priority=?, start_date=?, end_date=?, budget=?, description=? WHERE id=?");
-        $stmt->execute([$name, $status, $progress, $owner, $priority, $start, $end, $budget, $desc, $id]);
+        $notes = array_key_exists('notes', $data) ? trim($data['notes']) : $existing['notes'];
+        $stmt = $pdo->prepare("UPDATE projects SET name=?, status=?, progress=?, owner=?, priority=?, start_date=?, end_date=?, budget=?, description=?, notes=? WHERE id=?");
+        $stmt->execute([$name, $status, $progress, $owner, $priority, $start, $end, $budget, $desc, $notes ?: null, $id]);
 
         // upsert today's history point so the trend chart reflects the latest edit
-        $h = $pdo->prepare("INSERT INTO progress_history (project_id, entry_date, progress) VALUES (?, ?, ?)
-                             ON DUPLICATE KEY UPDATE progress = VALUES(progress)");
+        $h = $pdo->prepare("INSERT INTO progress_history (project_id, entry_date, progress, notes) VALUES (?, ?, ?, NULL)
+                             ON DUPLICATE KEY UPDATE progress = VALUES(progress), notes = COALESCE(notes, VALUES(notes))");
         $h->execute([$id, today(), $progress]);
 
         $stmt = $pdo->prepare("SELECT * FROM projects WHERE id = ?");
@@ -142,7 +162,7 @@ switch ($method) {
         $project['budget'] = (float) $project['budget'];
         $project['progress'] = (int) $project['progress'];
 
-        $hist = $pdo->prepare("SELECT entry_date AS date, progress FROM progress_history WHERE project_id = ? ORDER BY entry_date ASC");
+        $hist = $pdo->prepare("SELECT entry_date AS date, progress, notes FROM progress_history WHERE project_id = ? ORDER BY entry_date ASC");
         $hist->execute([$id]);
         $project['history'] = $hist->fetchAll();
 

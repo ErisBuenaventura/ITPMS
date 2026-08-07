@@ -16,6 +16,79 @@
 require_once __DIR__ . '/auth.php';
 require_login(); // gates both the page and every ?api=1 request below
 
+// Ensure progress_history has a notes column (safe, idempotent): add if missing.
+try {
+    $col = $pdo->query("SHOW COLUMNS FROM progress_history LIKE 'notes'")->fetch();
+    if (!$col) {
+        $pdo->exec("ALTER TABLE progress_history ADD COLUMN notes TEXT NULL");
+    }
+} catch (Throwable $e) {
+    // ignore — table may not exist in some environments (dev/import), rely on DB migration if needed
+}
+
+// Export API: authenticated users can request named reports in CSV or JSON.
+if (isset($_GET['export'])) {
+    $report = isset($_GET['report']) ? trim($_GET['report']) : 'projects';
+    $format = isset($_GET['format']) ? strtolower(trim($_GET['format'])) : 'csv';
+
+    $allowed = ['projects','history','projects_history','summary'];
+    if (!in_array($report, $allowed, true)) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Invalid report requested.']);
+        exit;
+    }
+
+    try {
+        switch ($report) {
+            case 'projects':
+                $stmt = $pdo->query("SELECT id,name,status,progress,owner,priority,start_date,end_date,budget,description,file_link,created_at,updated_at FROM projects ORDER BY created_at ASC");
+                $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                break;
+            case 'history':
+                            $stmt = $pdo->query("SELECT project_id AS project, entry_date AS date, progress, notes FROM progress_history ORDER BY project_id, entry_date ASC");
+                $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                break;
+            case 'projects_history':
+                            $stmt = $pdo->query("SELECT p.id AS project_id,p.name AS project_name,p.status,p.progress AS current_progress,p.owner,p.priority,p.start_date,p.end_date,p.budget,p.description,p.file_link, ph.entry_date AS history_date, ph.progress AS history_progress, ph.notes AS history_notes FROM projects p LEFT JOIN progress_history ph ON p.id=ph.project_id ORDER BY p.id, ph.entry_date ASC");
+                $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                break;
+            case 'summary':
+                $stmt = $pdo->query("SELECT p.id,p.name,p.status,p.progress,COUNT(ph.entry_date) AS history_points, MAX(ph.entry_date) AS last_update FROM projects p LEFT JOIN progress_history ph ON p.id=ph.project_id GROUP BY p.id ORDER BY p.name ASC");
+                $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                break;
+            default:
+                $rows = [];
+        }
+
+        if ($format === 'json') {
+            header('Content-Type: application/json');
+            echo json_encode($rows);
+            exit;
+        }
+
+        // Default CSV
+        $datePart = date('Ymd');
+        header('Content-Type: text/csv');
+        header('Content-Disposition: attachment; filename="itpms_export_' . $report . '_' . $datePart . '.csv"');
+        $out = fopen('php://output', 'w');
+        if ($out && count($rows) > 0) {
+            // header row
+            fputcsv($out, array_keys($rows[0]));
+            foreach ($rows as $r) fputcsv($out, array_values($r));
+        } elseif ($out) {
+            // nothing to export — still return an empty CSV with no rows
+            fputcsv($out, ['no_rows']);
+        }
+        if ($out) fclose($out);
+        exit;
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => 'Server error: ' . $e->getMessage()]);
+        exit;
+    }
+}
+
+
 /* ============================ API — every AJAX call hits index.php?api=1 ============================ */
 if (isset($_GET['api'])) {
     header('Content-Type: application/json');
@@ -61,7 +134,7 @@ if (isset($_GET['api'])) {
                 $project = $stmt->fetch();
                 if (!$project) api_fail(404, 'Project not found.');
 
-                $hist = $pdo->prepare("SELECT entry_date AS date, progress FROM progress_history WHERE project_id = ? ORDER BY entry_date ASC");
+                $hist = $pdo->prepare("SELECT entry_date AS date, progress, notes FROM progress_history WHERE project_id = ? ORDER BY entry_date ASC");
                 $hist->execute([$id]);
                 $project['history']  = $hist->fetchAll();
                 $project['budget']   = (float) $project['budget'];
@@ -96,19 +169,38 @@ if (isset($_GET['api'])) {
             $fileLink = trim($data['file_link'] ?? '');
             $newId    = next_project_id($pdo);
 
-            $stmt = $pdo->prepare("INSERT INTO projects (id, name, status, progress, owner, priority, start_date, end_date, budget, description, file_link)
-                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-            $stmt->execute([$newId, $name, $status, $progress, $owner, $priority, $start, $end, $budget, $desc, $fileLink ?: null]);
+            $notes = trim($data['notes'] ?? '');
+            $stmt = $pdo->prepare("INSERT INTO projects (id, name, status, progress, owner, priority, start_date, end_date, budget, description, file_link, notes)
+                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->execute([$newId, $name, $status, $progress, $owner, $priority, $start, $end, $budget, $desc, $fileLink ?: null, $notes ?: null]);
 
-            $h = $pdo->prepare("INSERT INTO progress_history (project_id, entry_date, progress) VALUES (?, ?, ?)");
-            $h->execute([$newId, today_str(), $progress]);
+            // If client supplied an explicit history array, upsert each entry. Otherwise insert today's point as before.
+            if (array_key_exists('history', $data) && is_array($data['history'])) {
+                $h2 = $pdo->prepare("INSERT INTO progress_history (project_id, entry_date, progress, notes) VALUES (?, ?, ?, ?)
+                                                     ON DUPLICATE KEY UPDATE progress = VALUES(progress), notes = VALUES(notes)");
+                foreach ($data['history'] as $entry) {
+                    if (!is_array($entry)) continue;
+                    $entryDate = $entry['date'] ?? null;
+                    $entryProg = isset($entry['progress']) ? (int) $entry['progress'] : null;
+                                    $entryNotes = isset($entry['notes']) ? trim($entry['notes']) : null;
+                                    if (!$entryDate || $entryProg === null) continue;
+                                    $entryProg = max(0, min(100, $entryProg));
+                                    try { $h2->execute([$newId, $entryDate, $entryProg, $entryNotes]); } catch (Throwable $e) { /* ignore invalid rows */ }
+                                }
+            } else {
+                $h = $pdo->prepare("INSERT INTO progress_history (project_id, entry_date, progress) VALUES (?, ?, ?)");
+                $h->execute([$newId, today_str(), $progress]);
+            }
 
             $stmt = $pdo->prepare("SELECT * FROM projects WHERE id = ?");
             $stmt->execute([$newId]);
             $project = $stmt->fetch();
             $project['budget']   = (float) $project['budget'];
             $project['progress'] = (int) $project['progress'];
-            $project['history']  = [['date' => today_str(), 'progress' => $progress]];
+
+            $hist = $pdo->prepare("SELECT entry_date AS date, progress, notes FROM progress_history WHERE project_id = ? ORDER BY entry_date ASC");
+            $hist->execute([$newId]);
+            $project['history'] = $hist->fetchAll();
 
             http_response_code(201);
             echo json_encode($project);
@@ -134,12 +226,28 @@ if (isset($_GET['api'])) {
             $desc     = trim($data['description'] ?? $existing['description']);
             $fileLink = array_key_exists('file_link', $data) ? trim($data['file_link']) : $existing['file_link'];
 
-            $stmt = $pdo->prepare("UPDATE projects SET name=?, status=?, progress=?, owner=?, priority=?, start_date=?, end_date=?, budget=?, description=?, file_link=? WHERE id=?");
-            $stmt->execute([$name, $status, $progress, $owner, $priority, $start, $end, $budget, $desc, $fileLink ?: null, $id]);
+            $notes = array_key_exists('notes', $data) ? trim($data['notes']) : $existing['notes'];
+            $stmt = $pdo->prepare("UPDATE projects SET name=?, status=?, progress=?, owner=?, priority=?, start_date=?, end_date=?, budget=?, description=?, file_link=?, notes=? WHERE id=?");
+            $stmt->execute([$name, $status, $progress, $owner, $priority, $start, $end, $budget, $desc, $fileLink ?: null, $notes ?: null, $id]);
 
-            $h = $pdo->prepare("INSERT INTO progress_history (project_id, entry_date, progress) VALUES (?, ?, ?)
-                                 ON DUPLICATE KEY UPDATE progress = VALUES(progress)");
+            $h = $pdo->prepare("INSERT INTO progress_history (project_id, entry_date, progress, notes) VALUES (?, ?, ?, NULL)
+                                 ON DUPLICATE KEY UPDATE progress = VALUES(progress), notes = COALESCE(notes, VALUES(notes))");
             $h->execute([$id, today_str(), $progress]);
+ 
+            // If the client included a 'history' array, upsert each provided entry (date + progress + notes).
+            if (array_key_exists('history', $data) && is_array($data['history'])) {
+                $h2 = $pdo->prepare("INSERT INTO progress_history (project_id, entry_date, progress, notes) VALUES (?, ?, ?, ?)
+                                     ON DUPLICATE KEY UPDATE progress = VALUES(progress), notes = VALUES(notes)");
+                foreach ($data['history'] as $entry) {
+                    if (!is_array($entry)) continue;
+                    $entryDate = $entry['date'] ?? null;
+                    $entryProg = isset($entry['progress']) ? (int) $entry['progress'] : null;
+                    $entryNotes = isset($entry['notes']) ? trim($entry['notes']) : null;
+                    if (!$entryDate || $entryProg === null) continue;
+                    $entryProg = max(0, min(100, $entryProg));
+                    try { $h2->execute([$id, $entryDate, $entryProg, $entryNotes]); } catch (Throwable $e) { /* ignore invalid rows */ }
+                }
+            }
 
             $stmt = $pdo->prepare("SELECT * FROM projects WHERE id = ?");
             $stmt->execute([$id]);
@@ -147,7 +255,7 @@ if (isset($_GET['api'])) {
             $project['budget']   = (float) $project['budget'];
             $project['progress'] = (int) $project['progress'];
 
-            $hist = $pdo->prepare("SELECT entry_date AS date, progress FROM progress_history WHERE project_id = ? ORDER BY entry_date ASC");
+            $hist = $pdo->prepare("SELECT entry_date AS date, progress, notes FROM progress_history WHERE project_id = ? ORDER BY entry_date ASC");
             $hist->execute([$id]);
             $project['history'] = $hist->fetchAll();
 
@@ -580,7 +688,26 @@ if (isset($_GET['requests_api'])) {
       <label class="field"><span>Target end date</span><input type="date" id="fEnd"></label>
       <label class="field span-2"><span>Budget (₱)</span><input type="number" id="fBudget" min="0" step="0.01" value="0"></label>
       <label class="field span-2"><span>Upload link (Google Drive, SharePoint, etc.)</span><input type="url" id="fFileLink" placeholder="https://drive.google.com/..."></label>
+
+      <!-- Progress history — shown when editing an existing project -->
+      <div class="field span-2" id="historySection">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <strong>Progress history</strong>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input type="date" id="hDate" style="height:32px;padding:4px;" />
+            <input type="number" id="hProgress" min="0" max="100" value="0" style="width:84px;height:32px;padding:4px;" />
+            <input type="text" id="hNotes" placeholder="Notes" style="width:320px;height:32px;padding:4px;" />
+            <button type="button" class="btn btn-ghost" id="hAddBtn">Add</button>
+          </div>
+        </div>
+        <div id="historyList" style="max-height:180px;overflow:auto;border:1px solid #EDEFF3;border-radius:8px;padding:8px;background:#FBFCFE;"></div>
+        <small style="color:#8A8F98;display:block;margin-top:6px;">Entries are stored by date; adding an entry for an existing date will overwrite that date's value.</small>
+      </div>
+
+      <label class="field span-2"><span>Previous update (notes)</span><textarea id="fNotes" rows="2" placeholder="Short note or previous update"></textarea></label>
+
       <label class="field span-2"><span>Description</span><textarea id="fDescription" rows="3" placeholder="What is this project about?"></textarea></label>
+
       <div class="form-actions span-2">
         <button type="button" class="btn btn-ghost" id="formModalCancel">Cancel</button>
         <button type="submit" class="btn btn-primary" id="formModalSubmit">Create project</button>
