@@ -58,7 +58,8 @@ CREATE TABLE `progress_history` (
   `id` int(10) UNSIGNED NOT NULL,
   `project_id` varchar(20) NOT NULL,
   `entry_date` date NOT NULL,
-  `progress` tinyint(3) UNSIGNED NOT NULL DEFAULT 0
+  `progress` tinyint(3) UNSIGNED NOT NULL DEFAULT 0,
+  `notes` text DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
@@ -144,6 +145,7 @@ CREATE TABLE `projects` (
   `budget` decimal(14,2) NOT NULL DEFAULT 0.00,
   `description` text DEFAULT NULL,
   `file_link` varchar(500) DEFAULT NULL,
+  `notes` text DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
