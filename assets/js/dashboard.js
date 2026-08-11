@@ -388,6 +388,9 @@ function resetForm() {
   document.getElementById('fStart').value = '';
   document.getElementById('fEnd').value = '';
   document.getElementById('fFileLink').value = '';
+  // clear history UI and show it for create by default
+  document.getElementById('historyList').innerHTML = '';
+  document.getElementById('historySection').style.display = '';
 }
 
 function openCreateModal() {
@@ -396,6 +399,12 @@ function openCreateModal() {
   document.getElementById('formModalTitle').textContent = 'New Project';
   document.getElementById('formModalSubmit').textContent = 'Create project';
   openModal('formModalOverlay');
+  // ensure the history section is visible to the user and focus its date input
+  setTimeout(() => {
+    const hs = document.getElementById('historySection');
+    if (hs) hs.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    const hd = document.getElementById('hDate'); if (hd) hd.focus();
+  }, 120);
 }
 
 async function openEditModal(id) {
@@ -416,7 +425,69 @@ async function openEditModal(id) {
   document.getElementById('fBudget').value = p.budget;
   document.getElementById('fFileLink').value = p.file_link || '';
   document.getElementById('fDescription').value = p.description || '';
+  document.getElementById('fNotes').value = p.notes || '';
+
+  // render history UI
+  const histSection = document.getElementById('historySection');
+  const histList = document.getElementById('historyList');
+  histList.innerHTML = '';
+  if (Array.isArray(p.history) && p.history.length > 0) {
+    histSection.style.display = '';
+    // sort by date asc
+    p.history.sort((a,b) => a.date.localeCompare(b.date));
+    p.history.forEach((h) => addHistoryRow(h.date, h.progress, h.notes || ''));
+  } else {
+    histSection.style.display = '';
+  }
+
   openModal('formModalOverlay');
+  // scroll history into view and focus first history field when editing
+  setTimeout(() => {
+    const hs = document.getElementById('historySection');
+    if (hs) hs.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    // focus first row's notes or date if present
+    const firstRow = document.querySelector('#historyList .history-row');
+    if (firstRow) {
+      const noteInput = firstRow.querySelector('input[type="text"]');
+      const dateInput = firstRow.querySelector('input[type="date"]');
+      (noteInput || dateInput)?.focus();
+    }
+  }, 120);
+}
+
+// history helpers
+function addHistoryRow(date, progress, notes) {
+  const list = document.getElementById('historyList');
+  const row = document.createElement('div');
+  row.className = 'history-row';
+  row.style = 'display:flex;align-items:center;justify-content:space-between;padding:6px 4px;border-bottom:1px solid #EEF1F4;';
+  const left = document.createElement('div');
+  left.style = 'display:flex;gap:12px;align-items:center;';
+  const d = document.createElement('input'); d.type = 'date'; d.value = date || ''; d.style = 'height:32px;';
+  const p = document.createElement('input'); p.type = 'number'; p.min = 0; p.max = 100; p.value = typeof progress !== 'undefined' ? progress : 0; p.style = 'width:84px;height:32px;';
+  const n = document.createElement('input'); n.type = 'text'; n.placeholder = 'Notes'; n.value = notes || ''; n.style = 'width:320px;height:32px;';
+  left.appendChild(d); left.appendChild(p); left.appendChild(n);
+  const right = document.createElement('div');
+  const removeBtn = document.createElement('button'); removeBtn.type = 'button'; removeBtn.className = 'btn btn-ghost'; removeBtn.textContent = 'Remove';
+  removeBtn.addEventListener('click', () => { row.remove(); });
+  right.appendChild(removeBtn);
+  row.appendChild(left); row.appendChild(right);
+  list.appendChild(row);
+}
+
+function collectHistoryFromForm() {
+  const rows = Array.from(document.getElementById('historyList').children || []);
+  const out = [];
+  for (const r of rows) {
+    const inputs = r.querySelectorAll('input');
+    if (inputs.length >= 3) {
+      const date = inputs[0].value;
+      const progress = Number(inputs[1].value) || 0;
+      const notes = inputs[2].value || '';
+      if (date) out.push({ date, progress, notes });
+    }
+  }
+  return out;
 }
 
 async function submitForm(e) {
@@ -432,7 +503,12 @@ async function submitForm(e) {
     budget: Number(document.getElementById('fBudget').value) || 0,
     file_link: document.getElementById('fFileLink').value.trim(),
     description: document.getElementById('fDescription').value.trim(),
+    notes: document.getElementById('fNotes') ? document.getElementById('fNotes').value.trim() : ''
   };
+  // include history for both create and edit if present
+  const hist = collectHistoryFromForm();
+  if (hist.length > 0) payload.history = hist;
+
   if (!payload.name) { showToast('Project name is required.', true); return; }
   try {
     if (editingId) { await api.update(editingId, payload); showToast('Project updated.'); }
@@ -489,6 +565,17 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('formModalClose').addEventListener('click', () => closeModal('formModalOverlay'));
   document.getElementById('formModalCancel').addEventListener('click', () => closeModal('formModalOverlay'));
   document.getElementById('formModalOverlay').addEventListener('click', (e) => { if (e.target.id === 'formModalOverlay') closeModal('formModalOverlay'); });
+  document.getElementById('hAddBtn').addEventListener('click', () => {
+    const d = document.getElementById('hDate').value;
+    const p = Number(document.getElementById('hProgress').value) || 0;
+    const n = (document.getElementById('hNotes') && document.getElementById('hNotes').value) ? document.getElementById('hNotes').value : '';
+    if (!d) { showToast('Please pick a date for the history entry.', true); return; }
+    addHistoryRow(d, p, n);
+    // clear inputs
+    document.getElementById('hDate').value = '';
+    document.getElementById('hProgress').value = 0;
+    if (document.getElementById('hNotes')) document.getElementById('hNotes').value = '';
+  });
   document.getElementById('projectForm').addEventListener('submit', submitForm);
   document.getElementById('fProgress').addEventListener('input', (e) => { document.getElementById('fProgressLabel').textContent = e.target.value; });
 

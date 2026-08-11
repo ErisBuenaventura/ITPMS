@@ -216,10 +216,110 @@ async function refresh() {
   } catch (e) { /* keep showing last known data if the request fails */ }
 }
 
+// Build a plain-text export that mirrors the report layout you provided.
+function formatDateLong(d) {
+  return new Intl.DateTimeFormat('en-US', { year: 'numeric', month: 'long', day: '2-digit' }).format(d);
+}
+
+function normalizePriority(p) {
+  if (!p) return '';
+  const s = String(p).toLowerCase();
+  if (s.includes('top')) return 'Top Priority';
+  if (s.includes('med')) return 'Medium Priority';
+  if (s.includes('low')) return 'Low Priority';
+  return p;
+}
+
+async function buildExportText(projects) {
+  const now = new Date();
+  let out = '';
+  out += 'IT Project Status Update\n';
+  out += 'As of ' + formatDateLong(now) + '\n\n';
+
+  const groups = { 'Completed': [], 'Ongoing': [], 'On Hold': [], 'Not Started': [] };
+  projects.forEach((p) => {
+    let s = p.status || '';
+    if (s === 'Onhold') s = 'On Hold';
+    if (s === 'On Hold' || s === 'Onhold') s = 'On Hold';
+    if (!groups[s]) groups[s] = [];
+    groups[s].push(p);
+  });
+
+  for (const section of ['Completed', 'Ongoing', 'On Hold', 'Not Started']) {
+    out += section.toUpperCase() + '\n';
+    const list = groups[section] || [];
+    if (list.length === 0) {
+      out += '\n';
+      continue;
+    }
+    for (const p of list) {
+      const pr = normalizePriority(p.priority);
+      out += `• ${p.name}${pr ? ' (' + pr + ')' : ''}\n`;
+
+      if (section === 'Ongoing') {
+        // Try to fetch detailed history for richer notes (previous/current) — fall back to description if fetch fails
+        let previous = '';
+        let current = '';
+        try {
+          const res = await fetch(`manager.php?api=1&id=${encodeURIComponent(p.id)}`);
+          if (res.ok) {
+            const full = await res.json();
+            const hist = Array.isArray(full.history) ? full.history.slice().sort((a,b) => a.date.localeCompare(b.date)) : [];
+            if (hist.length >= 2) previous = (hist[hist.length - 2].notes || '').trim();
+            if (hist.length >= 1) current = (hist[hist.length - 1].notes || '').trim();
+          }
+        } catch (e) { /* ignore — leave notes empty */ }
+
+        if (!previous) previous = 'None';
+        if (!current) current = p.description ? String(p.description).trim() : 'None';
+
+        out += `Previous: ${previous.replace(/\n+/g, ' ')}\n`;
+        out += `Current: ${current.replace(/\n+/g, ' ')}\n`;
+        if (p.file_link) out += `Link:\n${p.file_link}\n`;
+        out += '\n';
+      }
+    }
+    out += '\n';
+  }
+
+  out += 'All Project Tracker:\n' + window.location.href + '\n\n';
+  out += '___________________________________________________\n';
+  return out;
+}
+
+function downloadText(filename, text) {
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function exportAllAsText() {
+  const txt = await buildExportText(projects);
+  const datePart = new Date().toISOString().slice(0,10).replace(/-/g,'');
+  downloadText(`IT_Project_Status_Update_${datePart}.txt`, txt);
+}
+
+function exportAllAsPptx() {
+  // Trigger server-side PPTX generation and download using the template
+  const url = `manager.php?export=1&format=pptx`;
+  // open in a new tab to allow the browser to handle the download
+  window.open(url, '_blank');
+}
+
 window.addEventListener('resize', () => requestAnimationFrame(fitToScreen));
 document.addEventListener('DOMContentLoaded', () => {
   render();
   document.getElementById('viewModalClose').addEventListener('click', closeViewModal);
   document.getElementById('viewModalOverlay').addEventListener('click', (e) => { if (e.target.id === 'viewModalOverlay') closeViewModal(); });
+
+  const exportBtn = document.getElementById('exportTxtBtn');
+  if (exportBtn) exportBtn.addEventListener('click', exportAllAsPptx);
+
   setInterval(refresh, 30000); // background refresh every 30s — fully live, no page reload
 });
