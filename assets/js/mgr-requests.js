@@ -26,10 +26,21 @@ function mgrCategoryBadgeHtml(category) {
 let mgrRequests = window.INITIAL_MGR_REQUESTS || [];
 
 function mgrFormatDateTime(str) {
+  // kept for backward compatibility but not used for stacked layout
   if (!str) return '—';
   const d = new Date(str.replace(' ', 'T'));
   if (isNaN(d.getTime())) return '—';
   return d.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
+function mgrSplitDateTime(str) {
+  if (!str) return { date: '—', time: '' };
+  const d = new Date(str.replace(' ', 'T'));
+  if (isNaN(d.getTime())) return { date: '—', time: '' };
+  return {
+    date: d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }),
+    time: d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+  };
 }
 
 function mgrReqBadgeHtml(status) {
@@ -40,17 +51,29 @@ function mgrReqBadgeHtml(status) {
 function renderMgrRequests() {
   document.getElementById('reqCount').textContent = mgrRequests.length;
 
-  document.getElementById('mgrRequestsTableBody').innerHTML = mgrRequests.map((r) => `
+  document.getElementById('mgrRequestsTableBody').innerHTML = mgrRequests.map((r) => {
+    const issued = mgrSplitDateTime(r.created_at);
+    const resolved = mgrSplitDateTime(r.resolved_at);
+    return `
     <tr>
       <td>
-        <span class="proj-name">${escapeHtml(r.title)}</span>
-        ${r.requester ? `<div class="req-requester">by ${escapeHtml(r.requester)}</div>` : ''}
+        <div style="min-width:0;">
+          <span class="proj-name" title="${escapeHtml(r.title)}">${escapeHtml(r.title)}</span>
+          ${r.requester ? `<div class="req-requester">by ${escapeHtml(r.requester)}</div>` : ''}
+        </div>
       </td>
-      <td>${mgrCategoryBadgeHtml(r.category)}</td>
+      <td class="cat-cell">${mgrCategoryBadgeHtml(r.category)}</td>
       <td>${mgrReqBadgeHtml(r.status)}</td>
-      <td class="req-date">${mgrFormatDateTime(r.created_at)}</td>
-      <td class="req-date">${mgrFormatDateTime(r.resolved_at)}</td>
-    </tr>`).join('') || `<tr><td colspan="5" class="empty-row"><i data-lucide="clipboard-check" class="empty-icon"></i>No requests logged yet.</td></tr>`;
+      <td class="req-date">
+        <div class="req-date-day">${escapeHtml(issued.date)}</div>
+        <div class="req-date-time">${escapeHtml(issued.time)}</div>
+      </td>
+      <td class="req-date">
+        <div class="req-date-day">${escapeHtml(resolved.date)}</div>
+        <div class="req-date-time">${escapeHtml(resolved.time)}</div>
+      </td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="5" class="empty-row"><i data-lucide="clipboard-check" class="empty-icon"></i>No requests logged yet.</td></tr>`;
 
   if (window.lucide) lucide.createIcons();
   requestAnimationFrame(fitToScreen); // re-measure since this panel's height affects the overall fit-to-screen scale

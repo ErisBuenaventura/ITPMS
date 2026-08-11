@@ -40,6 +40,98 @@ function showToast(msg, isError) {
   showToast._t = setTimeout(() => el.classList.add('view-hidden'), 2600);
 }
 
+// Export current project details as a plain text file (download)
+function exportProjectAsText(p) {
+  try {
+    const lines = [];
+    lines.push(`Project: ${p.name} (${p.id})`);
+    lines.push(`Status: ${p.status}`);
+    lines.push(`Progress: ${p.progress}%`);
+    lines.push(`Owner: ${p.owner || '—'}`);
+    lines.push(`Priority: ${p.priority}`);
+    lines.push(`Start date: ${p.start_date || '—'}`);
+    lines.push(`Target end: ${p.end_date || '—'}`);
+    lines.push(`Budget: ${money(p.budget)}`);
+    lines.push('');
+    lines.push('Description:');
+    lines.push(p.description || 'No description provided.');
+    lines.push('');
+    lines.push('Progress history:');
+    if (p.history && p.history.length) {
+      p.history.forEach((h) => lines.push(`${h.date} — ${h.progress}%`));
+    } else {
+      lines.push('No history recorded.');
+    }
+
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const safeName = `${p.id} - ${p.name}`.replace(/[\\\/:*?"<>|]/g, '');
+    a.download = `${safeName}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    showToast('Exported project as text.');
+  } catch (e) {
+    showToast('Failed to export text: ' + (e.message || e), true);
+  }
+}
+
+// Placeholder: Export to PPT — template integration will be added when the template is provided.
+function exportProjectAsPpt(p) {
+  showToast('PPT export not yet configured. Please provide the PPT template to integrate.', true);
+}
+
+// Export all projects as a single combined text file
+function exportAllProjectsAsText() {
+  try {
+    if (!state.projects || state.projects.length === 0) { showToast('No projects to export.', true); return; }
+    const parts = [];
+    state.projects.forEach((p, idx) => {
+      parts.push(`=== Project ${idx + 1} / ${state.projects.length} ===`);
+      parts.push(`Project: ${p.name} (${p.id})`);
+      parts.push(`Status: ${p.status}`);
+      parts.push(`Progress: ${p.progress}%`);
+      parts.push(`Owner: ${p.owner || '—'}`);
+      parts.push(`Priority: ${p.priority}`);
+      parts.push(`Start date: ${p.start_date || '—'}`);
+      parts.push(`Target end: ${p.end_date || '—'}`);
+      parts.push(`Budget: ${money(p.budget)}`);
+      parts.push('');
+      parts.push('Description:');
+      parts.push(p.description || 'No description provided.');
+      parts.push('');
+      parts.push('Progress history:');
+      if (p.history && p.history.length) {
+        p.history.forEach((h) => parts.push(`${h.date} — ${h.progress}%`));
+      } else {
+        parts.push('No history recorded.');
+      }
+      parts.push('');
+    });
+
+    const blob = new Blob([parts.join('\n')], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `All Projects - ${new Date().toISOString().slice(0,10)}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    showToast('Exported all projects as text.');
+  } catch (e) {
+    showToast('Failed to export all projects: ' + (e.message || e), true);
+  }
+}
+
+// Placeholder: Export all projects to PPT
+function exportAllProjectsAsPpt() {
+  showToast('PPT export not yet configured. Please provide the PPT template to integrate.', true);
+}
+
 function badgeHtml(status) {
   const cfg = STATUS_CONFIG[status] || STATUS_CONFIG['Not Started'];
   return `<span class="badge" style="background:${cfg.soft};color:${cfg.color}"><i data-lucide="${cfg.icon}"></i>${cfg.label}</span>`;
@@ -258,6 +350,12 @@ async function openViewModal(id) {
     : `<span class="detail-row"><span>Files</span><b>No link added</b></span>`;
   document.getElementById('viewModalEditBtn').onclick = () => { closeModal('viewModalOverlay'); openEditModal(p.id); };
 
+  // wire up export buttons (if present in the DOM)
+  const exportTextBtn = document.getElementById('exportTextBtn');
+  if (exportTextBtn) exportTextBtn.onclick = () => exportProjectAsText(p);
+  const exportPptBtn = document.getElementById('exportPptBtn');
+  if (exportPptBtn) exportPptBtn.onclick = () => exportProjectAsPpt(p);
+
   const ctx = document.getElementById('progressChart').getContext('2d');
   if (chartInstance) chartInstance.destroy();
   chartInstance = new Chart(ctx, {
@@ -406,6 +504,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const value = e.target.value;
     searchDebounce = setTimeout(() => { state.search = value; state.page = 1; renderProjectsTable(); }, 150);
   });
+
+  // wire up export-all buttons in the Projects view header
+  const exportAllTextBtn = document.getElementById('exportAllTextBtn');
+  if (exportAllTextBtn) exportAllTextBtn.addEventListener('click', () => exportAllProjectsAsText());
+  const exportAllPptBtn = document.getElementById('exportAllPptBtn');
+  if (exportAllPptBtn) exportAllPptBtn.addEventListener('click', () => exportAllProjectsAsPpt());
 
   document.querySelectorAll('#view-projects .th-sort').forEach((th) => {
     th.addEventListener('click', () => {

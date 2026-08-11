@@ -125,6 +125,16 @@ try {
             <div class="panel-head">All Projects (<span id="projCount"><?= count($projects) ?></span>)</div>
             <div class="table-scroll">
               <table class="mgr-table">
+                <colgroup>
+                  <col style="width:48px">
+                  <col style="width:auto">
+                  <col style="width:110px">
+                  <col style="width:90px">
+                  <col style="width:220px">
+                  <col style="width:120px">
+                  <col style="width:56px">
+                  <col style="width:56px">
+                </colgroup>
                 <thead><tr><th>#</th><th>Project</th><th>Owner</th><th>Priority</th><th>Progress</th><th>Status</th><th>Files</th><th></th></tr></thead>
                 <tbody id="tableBody"></tbody>
               </table>
@@ -133,9 +143,25 @@ try {
         </div>
         <div class="mgr-col-right">
           <div class="panel">
+            <div class="panel-head">Projects — 2026</div>
+            <div class="panel-body">
+              <div class="chart-grid single-chart">
+                <div class="chart-box full-width"><canvas id="monthlyLineChart"></canvas></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel">
             <div class="panel-head">Employee IT Concerns (<span id="reqCount"><?= count($mgrRequests) ?></span>)</div>
             <div class="table-scroll">
               <table class="mgr-table mgr-table-compact">
+                <colgroup>
+                  <col style="width:auto">
+                  <col style="width:120px">
+                  <col style="width:120px">
+                  <col style="width:120px">
+                  <col style="width:120px">
+                </colgroup>
                 <thead><tr><th>Request</th><th>Category</th><th>Status</th><th>Issued</th><th>Resolved</th></tr></thead>
                 <tbody id="mgrRequestsTableBody"></tbody>
               </table>

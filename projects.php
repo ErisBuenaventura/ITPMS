@@ -10,7 +10,24 @@
  *   DELETE projects.php?id=PRJ-1   -> delete a project
  */
 
-require_once __DIR__ . '/../config.php';
+// locate config.php in a few likely places (this repo can be used from different working folders)
+$configCandidates = [
+    __DIR__ . '/config.php',
+    __DIR__ . '/../config.php',
+    __DIR__ . '/../../ITPMS/config.php',
+    __DIR__ . '/../ITPMS/config.php',
+    __DIR__ . '/../../config.php',
+];
+$configFound = null;
+foreach ($configCandidates as $c) {
+    if (file_exists($c)) { $configFound = $c; break; }
+}
+if (!$configFound) {
+    http_response_code(500);
+    echo 'Configuration file config.php not found. Searched: ' . implode(', ', $configCandidates);
+    exit;
+}
+require_once $configFound;
 
 header('Content-Type: application/json');
 
@@ -70,6 +87,153 @@ switch ($method) {
                 $r['budget']   = (float) $r['budget'];
                 $r['progress'] = (int) $r['progress'];
             }
+
+            // Combined PPT export: projects.php?export=1&format=pptx
+            if (isset($_GET['export']) && (isset($_GET['format']) && $_GET['format'] === 'pptx')) {
+                $templatesDir = __DIR__ . '/assets/templates';
+                $exact = $templatesDir . '/IT_DEPARTMENT_MANCOM_REPORT.pptx';
+                $template = null;
+
+                if (file_exists($exact)) {
+                    $template = $exact;
+                } else {
+                    $matches = glob($templatesDir . '/IT DEPARTMENT MANCOM REPORT*.pptx');
+                    if ($matches && count($matches)) {
+                        usort($matches, function($a, $b) { return filemtime($b) - filemtime($a); });
+                        $template = $matches[0];
+                    } else {
+                        $all = glob($templatesDir . '/*.pptx');
+                        if ($all && count($all)) {
+                            usort($all, function($a, $b) { return filemtime($b) - filemtime($a); });
+                            $template = $all[0];
+                        }
+                    }
+                }
+
+                if (!file_exists($template)) {
+                    http_response_code(500);
+                    echo "PPTX template not found in: {$templatesDir}. Please place a template PPTX there.";
+                    exit;
+                }
+
+                $autoload = __DIR__ . '/vendor/autoload.php';
+                if (!file_exists($autoload)) {
+                    http_response_code(500);
+                    echo "PHPPresentation not installed. Run in your project root: composer require phpoffice/phppresentation";
+                    exit;
+                }
+                require_once $autoload;
+
+                try {
+                    // Load template (keeps title/branding slides)
+                    $pptTemplate = \PhpOffice\PhpPresentation\IOFactory::load($template);
+
+                    // Find a slide in the template that contains the project-placeholder {{PROJECT_NAME}}
+                    $templateProjectSlide = null;
+                    foreach ($pptTemplate->getAllSlides() as $s) {
+                        foreach ($s->getShapeCollection() as $shape) {
+                            if ($shape instanceof \PhpOffice\PhpPresentation\Shape\RichText) {
+                                foreach ($shape->getParagraphs() as $pgr) {
+                                    foreach ($pgr->getRichTextElements() as $rte) {
+                                        if ($rte instanceof \PhpOffice\PhpPresentation\Shape\RichText\TextElement) {
+                                            if (strpos($rte->getText(), '{{PROJECT_NAME}}') !== false) { $templateProjectSlide = $s; break 3; }
+                                        }
+                                    }
+                                }
+                            } else {
+                                if (method_exists($shape, 'getText')) {
+                                    try { if (strpos($shape->getText(), '{{PROJECT_NAME}}') !== false) { $templateProjectSlide = $s; break 3; } } catch (Throwable $e) { }
+                                }
+                            }
+                        }
+                    }
+
+                    // Create a fresh presentation to assemble title slides + project slides
+                    $out = new \PhpOffice\PhpPresentation\PhpPresentation();
+
+                    // Copy all template slides except the placeholder slide into $out
+                    foreach ($pptTemplate->getAllSlides() as $slide) {
+                        if ($templateProjectSlide !== null && $slide === $templateProjectSlide) continue;
+                        $out->addSlide(clone $slide);
+                    }
+
+                    if ($templateProjectSlide !== null) {
+                        // For each project: clone the template project slide, replace placeholders, and add to output
+                        foreach ($rows as $p) {
+                            $newSlide = clone $templateProjectSlide;
+                            $placeholders = [
+                                '{{PROJECT_NAME}}' => $p['name'] ?? '',
+                                '{{STATUS}}' => $p['status'] ?? '',
+                                '{{PROGRESS}}' => (string)((int)($p['progress'] ?? 0)) . '%',
+                                '{{OWNER}}' => $p['owner'] ?? '',
+                                '{{START_DATE}}' => $p['start_date'] ?? '',
+                                '{{END_DATE}}' => $p['end_date'] ?? '',
+                                '{{DESCRIPTION}}' => trim($p['description'] ?? ''),
+                            ];
+
+                            foreach ($newSlide->getShapeCollection() as $shape) {
+                                if ($shape instanceof \PhpOffice\PhpPresentation\Shape\RichText) {
+                                    foreach ($shape->getParagraphs() as $pgr) {
+                                        foreach ($pgr->getRichTextElements() as $rte) {
+                                            if ($rte instanceof \PhpOffice\PhpPresentation\Shape\RichText\TextElement) {
+                                                $text = $rte->getText();
+                                                $new = strtr($text, $placeholders);
+                                                if ($new !== $text) { $rte->setText($new); }
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    if (method_exists($shape, 'getText') && method_exists($shape, 'setText')) {
+                                        try {
+                                            $text = $shape->getText();
+                                            $new = strtr($text, $placeholders);
+                                            if ($new !== $text) { $shape->setText($new); }
+                                        } catch (Throwable $e) { /* ignore shapes we can't read */ }
+                                    }
+                                }
+                            }
+
+                            $out->addSlide($newSlide);
+                        }
+                    } else {
+                        // Fallback: create simple project-detail slides if template placeholder not found
+                        foreach ($rows as $p) {
+                            $slide = $out->createSlide();
+
+                            $titleShape = $slide->createRichTextShape();
+                            $titleShape->setHeight(80)->setWidth(860)->setOffsetX(50)->setOffsetY(40);
+                            $titleRun = $titleShape->createTextRun($p['name'] ?? 'Untitled Project');
+                            $titleRun->getFont()->setBold(true)->setSize(36)->setName('Space Grotesk')->setColor(new \PhpOffice\PhpPresentation\Style\Color('000080'));
+
+                            $metaShape = $slide->createRichTextShape();
+                            $metaShape->setHeight(60)->setWidth(860)->setOffsetX(50)->setOffsetY(120);
+                            $metaText = sprintf("Status: %s    Progress: %d%%    Owner: %s    Start: %s    End: %s",
+                                $p['status'] ?? 'Unknown', (int)($p['progress'] ?? 0), $p['owner'] ?? '-', $p['start_date'] ?? '-', $p['end_date'] ?? '-');
+                            $metaRun = $metaShape->createTextRun($metaText);
+                            $metaRun->getFont()->setSize(14)->setName('Inter')->setColor(new \PhpOffice\PhpPresentation\Style\Color('000000'));
+
+                            $descShape = $slide->createRichTextShape();
+                            $descShape->setHeight(300)->setWidth(860)->setOffsetX(50)->setOffsetY(180);
+                            $desc = trim($p['description'] ?? '');
+                            if (strlen($desc) > 800) { $desc = substr($desc, 0, 800) . '...'; }
+                            $descRun = $descShape->createTextRun($desc ?: '-');
+                            $descRun->getFont()->setSize(16)->setName('Inter')->setColor(new \PhpOffice\PhpPresentation\Style\Color('000000'));
+                        }
+                    }
+
+                    header('Content-Type: application/vnd.openxmlformats-officedocument.presentationml.presentation');
+                    header('Content-Disposition: attachment; filename="Projects_Report_' . date('Ymd') . '.pptx"');
+
+                    $writer = \PhpOffice\PhpPresentation\IOFactory::createWriter($out, 'PowerPoint2007');
+                    $writer->save('php://output');
+                    exit;
+                } catch (Throwable $e) {
+                    http_response_code(500);
+                    echo 'Export error: ' . $e->getMessage();
+                    exit;
+                }
+            }
+
             echo json_encode($rows);
         }
         break;

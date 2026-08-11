@@ -18,7 +18,16 @@ html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); fo
    stops being readable, so phones get a normal scrolling list. */
 html, body { height: 100%; overflow: hidden; }
 
-.page { display: flex; flex-direction: column; height: 100vh; padding: 18px 26px; }
+.page { display: flex; flex-direction: column; height: 100vh; padding: 30px 40px; }
+
+/* Small inner padding so panels don't touch the viewport edges when scaled */
+.fit-outer { padding: 6px; }
+
+@media (max-width: 960px) {
+  .page { padding: 22px 24px; }
+}
+
+
 
 .top-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; flex-shrink: 0; }
 .brand { display: flex; align-items: center; gap: 10px; }
@@ -33,7 +42,7 @@ html, body { height: 100%; overflow: hidden; }
 .live-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--completed); margin-right: 5px; animation: pulse 1.6s infinite; }
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
 
-.fit-outer { flex: 1; min-height: 0; overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; position: relative; }
+.fit-outer { flex: 1; min-height: 0; overflow-x: hidden; overflow-y: hidden; -webkit-overflow-scrolling: touch; position: relative; padding: 6px; }
 .fit-inner { position: absolute; top: 0; left: 0; transform-origin: top left; }
 
 .stat-grid { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; }
@@ -41,22 +50,140 @@ html, body { height: 100%; overflow: hidden; }
 .stat-count { font-family: 'Space Grotesk', sans-serif; font-size: 24px; font-weight: 700; }
 .stat-label { font-size: 11.5px; color: var(--ink-soft); font-weight: 500; margin-top: 2px; }
 
+/* Overview panel: charts */
+.panel-body { padding: 12px 16px; }
+.chart-grid { display: flex; gap: 12px; align-items: stretch; }
+.chart-grid.single-chart { align-items: center; }
+.chart-box { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px; display: flex; align-items: center; justify-content: center; height: 160px; width: 100%; }
+.chart-box.full-width { height: 160px; width: 100%; }
+.chart-box canvas { width: 100% !important; height: 100% !important; }
+
+@media (max-width: 920px) {
+  .chart-grid { flex-direction: column; }
+  .chart-box.full-width { height: 140px; }
+}
+
 .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
 .panel-head { padding: 12px 20px; border-bottom: 1px solid #EDEFF3; font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 15px; }
 
 /* ---------- two-column layout: projects (left) + employee IT concerns (right) ---------- */
 .mgr-columns { display: flex; gap: 16px; align-items: flex-start; }
-.mgr-col-left { flex: 1.6; min-width: 0; }
-.mgr-col-right { flex: 1; min-width: 0; }
-.req-requester { font-size: 11px; color: #8A8F98; }
+/* Use 60/40 split on wider screens so requests column has more room */
+.mgr-col-left { flex: 0 0 60%; min-width: 0; }
+.mgr-col-right { flex: 0 0 40%; min-width: 0; }
+
+/* revert to stacked columns on smaller screens */
+@media (max-width: 960px) {
+  .mgr-col-left, .mgr-col-right { flex: 1 0 100%; }
+}
+.req-requester { font-size: 11px; color: #8A8F98; white-space: normal; }
 .req-date { white-space: nowrap; color: var(--ink-soft); font-size: 12px; }
 
+/* Stacked date/time for requests table so time appears below the date to reduce horizontal compression */
+.req-date { text-align: right; white-space: normal; }
+.req-date .req-date-day { display: block; font-size: 13px; color: var(--ink); font-weight: 600; }
+.req-date .req-date-time { display: block; font-size: 12px; color: var(--ink-soft); margin-top: 4px; }
+
+@media (max-width: 680px) {
+  /* On mobile stacked cards, show date/time left-aligned and compact */
+  .req-date { text-align: left; }
+  .req-date .req-date-day { font-size: 14px; }
+  .req-date .req-date-time { font-size: 12px; margin-top: 2px; }
+}
+
 /* ---------- table (all screen sizes — scrolls horizontally when narrower than content) ---------- */
-.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-table.mgr-table { border-collapse: collapse; width: 100%; min-width: 720px; }
-table.mgr-table.mgr-table-compact { min-width: 480px; }
-table.mgr-table th { text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: #8A8F98; font-weight: 600; padding: 9px 18px; border-bottom: 1px solid #EDEFF3; white-space: nowrap; }
-table.mgr-table td { padding: 10px 18px; border-bottom: 1px solid #F2F3F5; vertical-align: middle; font-size: 13px; white-space: nowrap; }
+.table-scroll { overflow-x: hidden; -webkit-overflow-scrolling: touch; }
+/* Allow the table to shrink to container width; use ellipsis or clamped two-line names */
+table.mgr-table { border-collapse: collapse; border-spacing: 0; width: 100%; min-width: 0; table-layout: fixed; }
+table.mgr-table.mgr-table-compact { min-width: 0; }
+table.mgr-table th { text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: #8A8F98; font-weight: 600; padding: 8px 12px; border-bottom: 1px solid #EDEFF3; white-space: nowrap; }
+/* Narrow fixed columns for index, files, and actions to remove large empty gaps */
+/* Keep most columns flexible so project name and other details can expand naturally */
+table.mgr-table th:nth-child(1), table.mgr-table td:nth-child(1) { width: 48px; text-align: center; padding-left: 8px; padding-right: 8px; }
+/* Small icon columns on the right */
+table.mgr-table th:nth-child(7), table.mgr-table td:nth-child(7), table.mgr-table th:nth-child(8), table.mgr-table td:nth-child(8) { width: 56px; text-align: center; padding-left: 8px; padding-right: 8px; }
+
+/* Let the browser size the remaining columns automatically (auto layout) */
+@supports (table-layout: auto) {
+  table.mgr-table { table-layout: auto; }
+}
+
+/* Ensure readable left alignment for titles and requester names */
+
+/* Explicit column width allocation to avoid odd empty gutters on wide screens */
+@media (min-width: 961px) {
+  /* Use automatic table layout on wide screens and fix only narrow columns.
+     Let the Project column auto-fill the remaining width to avoid empty gutters. */
+  table.mgr-table { table-layout: auto; }
+  table.mgr-table th:nth-child(1), table.mgr-table td:nth-child(1) { width: 48px; }
+  /* Project column left to auto size (fills remaining space) */
+  table.mgr-table th:nth-child(2), table.mgr-table td:nth-child(2) { width: auto; }
+  /* Fixed-ish narrow columns to keep layout tight */
+  table.mgr-table th:nth-child(3), table.mgr-table td:nth-child(3) { width: 110px; }
+  table.mgr-table th:nth-child(4), table.mgr-table td:nth-child(4) { width: 90px; }
+  table.mgr-table th:nth-child(5), table.mgr-table td:nth-child(5) { width: 220px; }
+  table.mgr-table th:nth-child(6), table.mgr-table td:nth-child(6) { width: 120px; }
+  table.mgr-table th:nth-child(7), table.mgr-table td:nth-child(7) { width: 56px; }
+  table.mgr-table th:nth-child(8), table.mgr-table td:nth-child(8) { width: 56px; }
+  /* Requests compact table: give first column more space */
+  table.mgr-table.mgr-table-compact th:nth-child(1), table.mgr-table.mgr-table-compact td:nth-child(1) { width: 45%; }
+}
+
+
+table.mgr-table td, table.mgr-table th { text-align: left; }
+table.mgr-table td:nth-child(1), table.mgr-table th:nth-child(1) { text-align: center; }
+
+table.mgr-table.mgr-table-compact td:first-child, table.mgr-table.mgr-table-compact th:first-child { text-align: left; }
+
+/* Tighten padding in icon columns */
+table.mgr-table td:nth-child(7), table.mgr-table td:nth-child(8) { padding-left: 6px; padding-right: 6px; }
+
+/* Files cell: center the icon */
+.files-cell { display: flex; align-items: center; justify-content: center; }
+
+/* Keep request titles left-aligned and readable */
+.mgr-table-compact td:first-child, .mgr-table-compact th:first-child { text-align: left; }
+.req-requester { text-align: left; }
+.req-date { text-align: left; }
+
+/* keep most cells single-line but allow the project/request name to wrap up to 2 lines */
+table.mgr-table td { padding: 8px 10px; border-bottom: 1px solid #F2F3F5; vertical-align: middle; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Remove narrow gutter between Project and Owner by tightening side paddings */
+table.mgr-table th:nth-child(2), table.mgr-table td:nth-child(2) { padding-right: 6px; }
+table.mgr-table th:nth-child(3), table.mgr-table td:nth-child(3) { padding-left: 6px; }
+/* Tighten requests panel columns: reduce gap between Request and Category */
+/* Slightly smaller horizontal padding for compact table cells */
+table.mgr-table.mgr-table-compact th, table.mgr-table.mgr-table-compact td { padding: 6px 8px; }
+/* Category column centered */
+table.mgr-table.mgr-table-compact th:nth-child(2), table.mgr-table.mgr-table-compact td:nth-child(2) { text-align: center; padding-left: 6px; padding-right: 6px; }
+/* Reduce padding on Request column to bring Category closer */
+table.mgr-table.mgr-table-compact th:nth-child(1), table.mgr-table.mgr-table-compact td:nth-child(1) { padding-right: 6px; }
+
+/* On wide screens shrink the Request column to content width so Category sits immediately after it */
+@media (min-width: 961px) {
+  /* Allow the Request column more room and wrap the title to two lines */
+  table.mgr-table.mgr-table-compact th:nth-child(1), table.mgr-table.mgr-table-compact td:nth-child(1) { width: auto; max-width: 420px; white-space: normal; }
+  table.mgr-table.mgr-table-compact td .proj-name { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  table.mgr-table.mgr-table-compact th:nth-child(2), table.mgr-table.mgr-table-compact td:nth-child(2) { width: 120px; text-align: center; }
+}
+
+.proj-name { font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; white-space: normal; max-width: 100%; line-height: 1.15; }
+/* Requests table: allow wider first column for readable titles */
+/* Requests table: do not enforce rigid widths — allow natural sizing for compact view */
+/* Width rules removed to prevent vertical character-wrapping on small screens */
+table.mgr-table.mgr-table-compact th:nth-child(2), table.mgr-table.mgr-table-compact td:nth-child(2) { width: 120px; }
+table.mgr-table.mgr-table-compact th:nth-child(3), table.mgr-table.mgr-table-compact td:nth-child(3) { width: 110px; }
+table.mgr-table.mgr-table-compact th:nth-child(4), table.mgr-table.mgr-table-compact td:nth-child(4) { width: 140px; }
+table.mgr-table.mgr-table-compact th:nth-child(5), table.mgr-table.mgr-table-compact td:nth-child(5) { width: 120px; }
+.proj-id { font-size: 10.5px; color: #8A8F98; font-weight: 500; margin-left: 6px; }
+@media (max-width: 920px) {
+  table.mgr-table th, table.mgr-table td { padding: 6px 8px; font-size: 12px; }
+  .proj-name { -webkit-line-clamp: 2; }
+}
+@media (max-width: 680px) {
+  table.mgr-table th, table.mgr-table td { padding: 4px 6px; font-size: 11px; }
+  .proj-name { -webkit-line-clamp: 2; font-size: 12px; }
+}
 table.mgr-table tbody tr:last-child td { border-bottom: none; }
 table.mgr-table tbody tr { transition: background-color .1s; }
 table.mgr-table tbody tr:hover { background-color: #FAFBFC; }
@@ -118,9 +245,40 @@ table.mgr-table tbody tr:hover { background-color: #FAFBFC; }
    stays reachable — no data is ever hidden on small screens. ---------- */
 @media (max-width: 680px) {
   html, body { height: auto; overflow: auto; }
-  .page { height: auto; padding: 14px 14px 28px; }
+  .page { height: auto; padding: 12px 10px 20px; }
   .fit-outer { overflow: visible; }
   .fit-inner { position: static; transform: none !important; width: 100%; }
-  .mgr-columns { flex-direction: column; }
+  .mgr-columns { flex-direction: column; gap: 12px; }
   .status-line { text-align: left; }
+
+  /* Convert wide table into stacked cards for mobile so nothing is clipped */
+  .table-scroll { overflow: visible; }
+  table.mgr-table { display: block; }
+  table.mgr-table thead { display: none; }
+  table.mgr-table tbody { display: block; }
+  table.mgr-table tr { display: block; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 12px; padding: 12px; }
+  table.mgr-table td { display: block; width: 100%; padding: 6px 0; border-bottom: none; white-space: normal; overflow: hidden; }
+  table.mgr-table td .proj-name { -webkit-line-clamp: 2; font-size: 14px; line-height: 1.2; }
+  table.mgr-table td .proj-id { display: block; margin-top: 6px; color: #8A8F98; font-size: 12px; }
+  table.mgr-table td:nth-child(1) { display: none; }
+  table.mgr-table td:nth-child(7), table.mgr-table td:nth-child(8) { display: inline-block; width: auto; padding: 6px; }
+  .pbar-wrap { width: 100%; }
+
+  /* Compact requests - stacked cards */
+  table.mgr-table.mgr-table-compact { display: block; }
+  table.mgr-table.mgr-table-compact thead { display: none; }
+  table.mgr-table.mgr-table-compact tbody { display: block; }
+  table.mgr-table.mgr-table-compact tr { display: block; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 10px; padding: 12px; }
+  table.mgr-table.mgr-table-compact td { display: block; width: 100%; padding: 6px 0; white-space: normal; }
+
+  /* Make request title prominent and left-aligned, show requester below it */
+  table.mgr-table.mgr-table-compact td:first-child { font-size: 14px; font-weight: 600; color: var(--ink); }
+  table.mgr-table.mgr-table-compact td:first-child .req-requester { display: block; margin-top: 6px; color: var(--ink-soft); font-size: 12px; }
+  /* Show category and status badges inline on the next line */
+  table.mgr-table.mgr-table-compact td:nth-child(2), table.mgr-table.mgr-table-compact td:nth-child(3) { display: inline-block; margin-right: 8px; }
+  table.mgr-table.mgr-table-compact td:nth-child(4), table.mgr-table.mgr-table-compact td:nth-child(5) { display: block; margin-top: 8px; color: var(--ink-soft); font-size: 12px; }
+
+  /* Ensure panels use full width and align with cards */
+  .panel { width: 100%; }
+  .mgr-col-left, .mgr-col-right { width: 100%; }
 }

@@ -6,7 +6,7 @@ const STATUS_CONFIG = {
   'Not Started': { color: '#8A8F98', soft: '#EEEFF1', icon: 'circle',         label: 'Not Started' },
 };
 const STATUSES = Object.keys(STATUS_CONFIG);
-const MIN_SCALE = 0.55; // below this, stop shrinking further and allow internal scroll instead
+const MIN_SCALE = 0.45; // lower minimum scale so page compresses more instead of enabling scroll
 
 let projects = window.INITIAL_PROJECTS || [];
 let chartInstance = null;
@@ -40,20 +40,67 @@ function fileCellHtml(p) {
     : `<span class="icon-btn icon-btn-disabled" title="No upload link set"><i data-lucide="folder-open"></i></span>`;
 }
 
+let lineChart2026Instance = null;
+
+function drawLineChart2026() {
+  const allLabels = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const counts = new Array(12).fill(0);
+
+  projects.forEach(p => {
+    const sd = p.start_date || p.created_at;
+    if (!sd) return;
+    const d = new Date(sd.replace(' ', 'T'));
+    if (isNaN(d)) return;
+    if (d.getFullYear() !== 2026) return;
+    counts[d.getMonth()]++;
+  });
+
+  // determine last month to display: last month with any project, otherwise current month
+  let lastIndex = counts.map((c, i) => ({c,i})).filter(x=>x.c>0).map(x=>x.i).pop();
+  if (lastIndex === undefined) lastIndex = new Date().getMonth();
+  // ensure at least Jan is shown
+  lastIndex = Math.max(0, lastIndex);
+
+  const labels = allLabels.slice(0, lastIndex + 1);
+  const data = counts.slice(0, lastIndex + 1);
+
+  const ctx = document.getElementById('monthlyLineChart')?.getContext?.('2d');
+  if (!ctx) return;
+
+  if (lineChart2026Instance) {
+    lineChart2026Instance.data.labels = labels;
+    lineChart2026Instance.data.datasets[0].data = data;
+    lineChart2026Instance.update();
+  } else {
+    lineChart2026Instance = new Chart(ctx, {
+      type: 'line',
+      data: { labels, datasets: [{ label: 'Projects started', data: data, borderColor: '#2F5D8A', backgroundColor: '#2F5D8A22', tension: 0.35, fill: true, pointRadius: 3 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0, stepSize: 1 }, grid: { color: '#E4E7EC' } }, x: { grid: { display: false } } } }
+    });
+  }
+}
+
 function render() {
   const counts = {}; STATUSES.forEach((s) => (counts[s] = 0));
   projects.forEach((p) => (counts[p.status] = (counts[p.status] || 0) + 1));
 
   const overdueCount = projects.filter(isOverdue).length;
 
-  document.getElementById('statGrid').innerHTML = STATUSES.map((s) => {
+  // build status cards + overdue
+  let statusHtml = STATUSES.map((s) => {
     const cfg = STATUS_CONFIG[s];
     return `<div class="stat-card" style="--c:${cfg.color};--s:${cfg.soft}">
       <div class="stat-count">${counts[s]}</div>
       <div class="stat-label">${cfg.label}</div></div>`;
-  }).join('') + `<div class="stat-card" style="--c:#C4483C;--s:#FBE7E5">
+  }).join('');
+  statusHtml += `<div class="stat-card" style="--c:#C4483C;--s:#FBE7E5">
       <div class="stat-count">${overdueCount}</div>
       <div class="stat-label">Overdue</div></div>`;
+
+  document.getElementById('statGrid').innerHTML = statusHtml;
+
+  // update charts: line chart for projects per month in 2026 based on start_date
+  drawLineChart2026();
 
   document.getElementById('projCount').textContent = projects.length;
 
@@ -61,13 +108,17 @@ function render() {
   document.getElementById('tableBody').innerHTML = projects.map((p, i) => `
     <tr>
       <td class="mono">${i + 1}</td>
-      <td><span class="proj-name">${escapeHtml(p.name)}</span>${isOverdue(p) ? '<span class="overdue-dot" title="Overdue"></span>' : ''}<span class="proj-id mono">${p.id}</span></td>
+      <td><span class="proj-name" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span>${isOverdue(p) ? '<span class="overdue-dot" title="Overdue"></span>' : ''}<span class="proj-id mono">${p.id}</span></td>
       <td>${escapeHtml(p.owner || '—')}</td>
       <td>${escapeHtml(p.priority)}</td>
       <td>${progressBarHtml(p.progress, p.status)}</td>
       <td>${badgeHtml(p.status)}</td>
       <td>${fileCellHtml(p)}</td>
-      <td><div class="row-actions"><button class="icon-btn btn-view" title="View progress" data-id="${p.id}"><i data-lucide="eye"></i></button></div></td>
+      <td>
+        <div class="row-actions">
+          <button class="icon-btn btn-view" title="View details" data-id="${p.id}"><i data-lucide="eye"></i></button>
+        </div>
+      </td>
     </tr>`).join('') || `<tr><td colspan="8" class="empty-row"><i data-lucide="inbox" class="empty-icon"></i>No projects yet.</td></tr>`;
 
   document.querySelectorAll('.btn-view').forEach((b) => b.addEventListener('click', () => openViewModal(b.dataset.id)));
@@ -77,9 +128,6 @@ function render() {
 }
 
 function fitToScreen() {
-  // Phones use natural document flow + scrolling (see CSS media query) — skip scaling there.
-  if (window.matchMedia('(max-width: 680px)').matches) return;
-
   const outer = document.getElementById('fitOuter');
   const inner = document.getElementById('fitInner');
   const outerW = outer.clientWidth;
@@ -92,12 +140,13 @@ function fitToScreen() {
   const naturalH = inner.scrollHeight;
 
   let scale = Math.min(1, outerH / naturalH);
+  // If content is taller than container even at MIN_SCALE, allow vertical scrolling
+  let allowVScroll = false;
   if (scale < MIN_SCALE) {
     scale = MIN_SCALE;
-    outer.style.overflowY = 'auto';
-  } else {
-    outer.style.overflowY = 'hidden';
+    if (naturalH > outerH) allowVScroll = true;
   }
+  outer.style.overflowY = allowVScroll ? 'auto' : 'hidden';
 
   // Step 2: widen the content by 1/scale so that after scaling it back
   // down, it exactly fills outerW again — no leftover space on the right.

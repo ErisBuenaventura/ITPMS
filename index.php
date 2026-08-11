@@ -398,6 +398,10 @@ if (isset($_GET['requests_api'])) {
               <i data-lucide="search"></i>
               <input type="text" id="projectSearch" placeholder="Search name or owner…">
             </div>
+            <div class="panel-actions">
+              <button class="btn btn-ghost" id="exportAllTextBtn" title="Export all projects as text"><i data-lucide="file-text"></i> Export all — Text</button>
+              <button class="btn btn-ghost" id="exportAllPptBtn" title="Export all projects as PPT"><i data-lucide="file"></i> Export all — PPT</button>
+            </div>
             <button class="chip-clear view-hidden" id="chipClear"></button>
             <span class="panel-sub" id="projectsCount"></span>
           </div>
@@ -539,6 +543,10 @@ if (isset($_GET['requests_api'])) {
         </div>
         <p class="detail-desc" id="viewDesc"></p>
         <div id="viewFileLinkWrap"></div>
+        <div class="view-exports">
+          <button class="btn btn-ghost" id="exportTextBtn"><i data-lucide="file-text"></i> Export — Text</button>
+          <button class="btn btn-ghost" id="exportPptBtn"><i data-lucide="file"></i> Export — PPT</button>
+        </div>
         <button class="btn btn-primary btn-block" id="viewModalEditBtn"><i data-lucide="pencil"></i> Edit project</button>
       </div>
       <div class="view-chart">
