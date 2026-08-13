@@ -486,7 +486,7 @@ if (isset($_GET['requests_api'])) {
         </div>
         <div class="table-scroll">
           <table class="proj-table">
-            <thead><tr><th class="col-no">No.</th><th>Project</th><th class="col-progress">Progress</th><th class="col-status">Status</th></tr></thead>
+            <thead><tr><th class="col-no">No.</th><th>Project</th><th class="col-status">Status</th><th class="col-progress">Progress</th><th class="col-priority">Priority</th><th class="col-start_date">Start Date</th><th class="col-end_date">End Date</th></thead>
             <tbody id="dashboardTableBody"></tbody>
           </table>
         </div>
@@ -519,8 +519,12 @@ if (isset($_GET['requests_api'])) {
             <thead><tr>
               <th class="col-no">No.</th>
               <th class="th-sort" data-sort="name">Project<i data-lucide="chevrons-up-down" class="sort-icon"></i></th>
-              <th class="col-progress th-sort" data-sort="progress">Progress<i data-lucide="chevrons-up-down" class="sort-icon"></i></th>
               <th class="col-status th-sort" data-sort="status">Status<i data-lucide="chevrons-up-down" class="sort-icon"></i></th>
+              <th class="col-progress th-sort" data-sort="progress">Progress<i data-lucide="chevrons-up-down" class="sort-icon"></i></th>
+              <th class="col-owner th-sort" data-sort="owner">Owner<i data-lucide="chevrons-up-down" class="sort-icon"></i></th>
+              <th class="col-priority th-sort" data-sort="priority">Priority<i data-lucide="chevrons-up-down" class="sort-icon"></i></th>
+              <th class="col-start_date th-sort" data-sort="start_date">Start Date<i data-lucide="chevrons-up-down" class="sort-icon"></i></th>
+              <th class="col-end_date th-sort" data-sort="end_date">End Date<i data-lucide="chevrons-up-down" class="sort-icon"></i></th>
               <th class="col-actions">Actions</th>
             </tr></thead>
             <tbody id="projectsTableBody"></tbody>

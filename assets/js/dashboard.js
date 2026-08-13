@@ -146,23 +146,128 @@ function progressBarHtml(value, status, compact) {
 }
 
 const api = {
-  async list() { const r = await fetch(API_URL); if (!r.ok) throw new Error('Failed to load projects.'); return r.json(); },
-  async get(id) { const r = await fetch(`${API_URL}&id=${encodeURIComponent(id)}`); if (!r.ok) throw new Error('Failed to load project.'); return r.json(); },
+  async list() {
+    const r = await fetch(API_URL, {
+      method: 'GET',
+      credentials: 'same-origin',
+      cache: 'no-store'
+    });
+
+    const text = await r.text();
+
+    if (!r.ok) {
+      console.error('PROJECT API ERROR:', r.status, text);
+      throw new Error(`Failed to load projects. HTTP ${r.status}: ${text}`);
+    }
+
+    try {
+      return JSON.parse(text);
+    } catch (e) {
+      console.error('INVALID JSON FROM PROJECT API:', text);
+      throw new Error('Server returned invalid JSON. Check PHP error.');
+    }
+  },
+
+  async get(id) {
+    const r = await fetch(
+      `${API_URL}&id=${encodeURIComponent(id)}`,
+      {
+        method: 'GET',
+        credentials: 'same-origin',
+        cache: 'no-store'
+      }
+    );
+
+    const text = await r.text();
+
+    if (!r.ok) {
+      console.error('PROJECT GET ERROR:', r.status, text);
+      throw new Error(`Failed to load project. HTTP ${r.status}: ${text}`);
+    }
+
+    try {
+      return JSON.parse(text);
+    } catch (e) {
+      console.error('INVALID JSON FROM PROJECT:', text);
+      throw new Error('Server returned invalid JSON.');
+    }
+  },
+
   async create(data) {
-    const r = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-    if (!r.ok) throw new Error((await r.json()).error || 'Failed to create project.');
-    return r.json();
+    const r = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify(data)
+    });
+
+    const text = await r.text();
+
+    if (!r.ok) {
+      console.error('CREATE ERROR:', r.status, text);
+      let error = text;
+
+      try {
+        error = JSON.parse(text).error || text;
+      } catch (e) {}
+
+      throw new Error(error || 'Failed to create project.');
+    }
+
+    return JSON.parse(text);
   },
+
   async update(id, data) {
-    const r = await fetch(`${API_URL}&id=${encodeURIComponent(id)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-    if (!r.ok) throw new Error((await r.json()).error || 'Failed to update project.');
-    return r.json();
+    const r = await fetch(
+      `${API_URL}&id=${encodeURIComponent(id)}`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify(data)
+      }
+    );
+
+    const text = await r.text();
+
+    if (!r.ok) {
+      console.error('UPDATE ERROR:', r.status, text);
+      let error = text;
+
+      try {
+        error = JSON.parse(text).error || text;
+      } catch (e) {}
+
+      throw new Error(error || 'Failed to update project.');
+    }
+
+    return JSON.parse(text);
   },
+
   async remove(id) {
-    const r = await fetch(`${API_URL}&id=${encodeURIComponent(id)}`, { method: 'DELETE' });
-    if (!r.ok) throw new Error((await r.json()).error || 'Failed to delete project.');
-    return r.json();
-  },
+    const r = await fetch(
+      `${API_URL}&id=${encodeURIComponent(id)}`,
+      {
+        method: 'DELETE',
+        credentials: 'same-origin'
+      }
+    );
+
+    const text = await r.text();
+
+    if (!r.ok) {
+      console.error('DELETE ERROR:', r.status, text);
+      let error = text;
+
+      try {
+        error = JSON.parse(text).error || text;
+      } catch (e) {}
+
+      throw new Error(error || 'Failed to delete project.');
+    }
+
+    return JSON.parse(text);
+  }
 };
 
 async function loadProjects() {
@@ -221,16 +326,64 @@ function renderStatGrid() {
 
 function renderDashboardTable() {
   const rows = state.projects;
-  document.getElementById('dashboardCount').textContent = `${rows.length} total projects`;
-  document.getElementById('dashboardTableBody').innerHTML = rows.map((p, i) => `
-    <tr class="row-clickable" data-id="${p.id}">
-      <td class="col-no mono" data-label="No.">${i + 1}</td>
-      <td class="proj-name" data-label="Project">${escapeHtml(p.name)}${isOverdue(p) ? '<span class="overdue-dot" title="Overdue"></span>' : ''}<span class="proj-id mono">${p.id}</span></td>
-      <td class="col-progress" data-label="Progress">${progressBarHtml(p.progress, p.status, true)}</td>
-      <td class="col-status" data-label="Status">${badgeHtml(p.status)}</td>
-    </tr>`).join('') || `<tr><td colspan="4" class="empty-row"><i data-lucide="inbox" class="empty-icon"></i>No projects yet.</td></tr>`;
 
-  document.querySelectorAll('#dashboardTableBody tr[data-id]').forEach((tr) => tr.addEventListener('click', () => openViewModal(tr.dataset.id)));
+  document.getElementById('dashboardCount').textContent =
+    `${rows.length} total projects`;
+
+  document.getElementById('dashboardTableBody').innerHTML = rows.map((p, i) => `
+    <tr class="row-clickable" data-id="${escapeHtml(p.id)}">
+
+      <td class="col-no mono" data-label="No.">
+        ${i + 1}
+      </td>
+
+      <td class="proj-name" data-label="Project">
+        ${escapeHtml(p.name)}
+        ${isOverdue(p)
+          ? '<span class="overdue-dot" title="Overdue"></span>'
+          : ''
+        }
+        <span class="proj-id mono">${escapeHtml(p.id)}</span>
+      </td>
+
+      <td class="col-status" data-label="Status">
+        ${badgeHtml(p.status)}
+      </td>
+
+      <td class="col-progress" data-label="Progress">
+        ${progressBarHtml(p.progress, p.status, true)}
+      </td>
+
+      <td class="col-priority" data-label="Priority">
+        ${escapeHtml(p.priority || '—')}
+      </td>
+
+      <td class="col-start_date" data-label="Start Date">
+        ${escapeHtml(p.start_date || '—')}
+      </td>
+
+      <td class="col-end_date" data-label="End Date">
+        ${escapeHtml(p.end_date || '—')}
+      </td>
+
+    </tr>
+  `).join('') || `
+    <tr>
+      <td colspan="7" class="empty-row">
+        <i data-lucide="inbox" class="empty-icon"></i>
+        No projects yet.
+      </td>
+    </tr>
+  `;
+
+  document
+    .querySelectorAll('#dashboardTableBody tr[data-id]')
+    .forEach((tr) => {
+      tr.addEventListener('click', () => {
+        openViewModal(tr.dataset.id);
+      });
+    });
+
   icons();
 }
 
@@ -278,19 +431,64 @@ function renderProjectsTable() {
 
   document.getElementById('projectsTableBody').innerHTML = pageRows.map((p, i) => `
     <tr data-id="${p.id}">
-      <td class="col-no mono" data-label="No.">${(state.page - 1) * PAGE_SIZE + i + 1}</td>
-      <td class="proj-name" data-label="Project">${escapeHtml(p.name)}${isOverdue(p) ? '<span class="overdue-dot" title="Overdue"></span>' : ''}<span class="proj-id mono">${p.id}</span></td>
-      <td class="col-progress" data-label="Progress">${progressBarHtml(p.progress, p.status, true)}</td>
-      <td class="col-status" data-label="Status">${badgeHtml(p.status)}</td>
+      <td class="col-no mono" data-label="No.">
+        ${(state.page - 1) * PAGE_SIZE + i + 1}
+      </td>
+
+      <td class="proj-name" data-label="Project">
+        ${escapeHtml(p.name)}
+        ${isOverdue(p) ? '<span class="overdue-dot" title="Overdue"></span>' : ''}
+        <span class="proj-id mono">${p.id}</span>
+      </td>
+
+      <td class="col-status" data-label="Status">
+        ${badgeHtml(p.status)}
+      </td>
+
+      <td class="col-progress" data-label="Progress">
+        ${progressBarHtml(p.progress, p.status, true)}
+      </td>
+
+      <td data-label="Owner">
+        ${escapeHtml(p.owner || '—')}
+      </td>
+
+      <td data-label="Priority">
+        ${escapeHtml(p.priority || '—')}
+      </td>
+
+      <td data-label="Start Date">
+        ${escapeHtml(p.start_date || '—')}
+      </td>
+
+      <td data-label="End Date">
+        ${escapeHtml(p.end_date || '—')}
+      </td>
+
       <td class="col-actions" data-label="Actions">
         ${p.file_link
           ? `<a class="icon-btn" title="Open project files" href="${escapeHtml(p.file_link)}" target="_blank" rel="noopener"><i data-lucide="folder-open"></i></a>`
           : `<span class="icon-btn" title="No upload link set" style="opacity:.3;cursor:default"><i data-lucide="folder-open"></i></span>`}
-        <button class="icon-btn btn-view" title="View" data-id="${p.id}"><i data-lucide="eye"></i></button>
-        <button class="icon-btn btn-edit" title="Edit" data-id="${p.id}"><i data-lucide="pencil"></i></button>
-        <button class="icon-btn icon-btn-danger btn-delete" title="Delete" data-id="${p.id}"><i data-lucide="trash-2"></i></button>
+
+        <button class="icon-btn btn-view" title="View" data-id="${p.id}">
+          <i data-lucide="eye"></i>
+        </button>
+
+        <button class="icon-btn btn-edit" title="Edit" data-id="${p.id}">
+          <i data-lucide="pencil"></i>
+        </button>
+
+        <button class="icon-btn icon-btn-danger btn-delete" title="Delete" data-id="${p.id}">
+          <i data-lucide="trash-2"></i>
+        </button>
       </td>
-    </tr>`).join('') || `<tr><td colspan="5" class="empty-row"><i data-lucide="search-x" class="empty-icon"></i>No projects match your filters.</td></tr>`;
+    </tr>
+  `).join('') || `<tr>
+    <td colspan="9" class="empty-row">
+      <i data-lucide="search-x" class="empty-icon"></i>
+      No projects match your filters.
+    </td>
+  </tr>`;
 
   renderPagination(totalFiltered, totalPages);
 
