@@ -16,14 +16,25 @@
 require_once __DIR__ . '/auth.php';
 require_login(); // gates both the page and every ?api=1 request below
 
-// Ensure progress_history has a notes column (safe, idempotent): add if missing.
+// Ensure required notes columns exist (safe, idempotent).
 try {
+    // Project notes
+    $col = $pdo->query("SHOW COLUMNS FROM projects LIKE 'notes'")->fetch();
+
+    if (!$col) {
+        $pdo->exec("ALTER TABLE projects ADD COLUMN notes TEXT NULL");
+    }
+
+    // Progress history notes
     $col = $pdo->query("SHOW COLUMNS FROM progress_history LIKE 'notes'")->fetch();
+
     if (!$col) {
         $pdo->exec("ALTER TABLE progress_history ADD COLUMN notes TEXT NULL");
     }
+
 } catch (Throwable $e) {
-    // ignore — table may not exist in some environments (dev/import), rely on DB migration if needed
+    // Ignore migration errors.
+    // The database schema can also be updated manually through database.sql.
 }
 
 // Export API: authenticated users can request named reports in CSV or JSON.

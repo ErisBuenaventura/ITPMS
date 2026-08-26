@@ -22,118 +22,7 @@
 
 require_once __DIR__ . '/auth.php';
 
-// PPTX export handler — manager.php?export=pptx
-if (isset($_GET['export']) && (isset($_GET['format']) && $_GET['format'] === 'pptx' || (isset($_GET['export_pptx']) && $_GET['export_pptx']))) {
-    $template = __DIR__ . '/assets/templates/IT_DEPARTMENT_MANCOM_REPORT.pptx';
-    if (!file_exists($template)) {
-        http_response_code(500);
-        echo "Template not found at: {$template}. Please place your PPTX template at that path.";
-        exit;
-    }
-
-    $autoload = __DIR__ . '/vendor/autoload.php';
-    if (!file_exists($autoload)) {
-        http_response_code(500);
-        echo "PHPPresentation not installed. Run in your project root: composer require phpoffice/phppresentation";
-        exit;
-    }
-
-    require_once $autoload;
-
-    try {
-        // Load template
-        $ppt = \PhpOffice\PhpPresentation\IOFactory::load($template);
-
-        // Gather projects and group them
-        $stmt = $pdo->query("SELECT * FROM projects ORDER BY created_at ASC");
-        $rows = $stmt->fetchAll();
-
-        $completed = '';
-        $ongoing = '';
-        $onhold = '';
-        $notstarted = '';
-
-        foreach ($rows as $p) {
-            $line = '• ' . ($p['name'] ?? '') . ' (' . ($p['priority'] ?? 'Unknown') . ' Priority)';
-            $status = strtolower(trim($p['status'] ?? ''));
-            if ($status === 'completed') {
-                $completed .= $line . PHP_EOL;
-                continue;
-            }
-            if ($status === 'on hold' || $status === 'on-hold') {
-                $onhold .= $line . PHP_EOL;
-                continue;
-            }
-            if ($status === 'not started' || $status === 'not-started' || $status === '') {
-                $notstarted .= $line . PHP_EOL;
-                continue;
-            }
-            // treat others as ongoing/in progress
-            // fetch last two history notes
-            $hstmt = $pdo->prepare("SELECT entry_date AS date, progress, notes FROM progress_history WHERE project_id = ? ORDER BY entry_date DESC LIMIT 2");
-            $hstmt->execute([$p['id']]);
-            $hist = $hstmt->fetchAll();
-            $curr = isset($hist[0]['notes']) && strlen(trim((string)$hist[0]['notes'])) ? $hist[0]['notes'] : (isset($p['notes']) && strlen(trim((string)$p['notes'])) ? $p['notes'] : (isset($p['description']) ? $p['description'] : 'None'));
-            $prev = isset($hist[1]['notes']) && strlen(trim((string)$hist[1]['notes'])) ? $hist[1]['notes'] : 'None';
-            $link = !empty($p['file_link']) ? $p['file_link'] : '';
-
-            $ongoing .= $line . PHP_EOL;
-            $ongoing .= 'Previous: ' . $prev . PHP_EOL;
-            $ongoing .= 'Current: ' . $curr . PHP_EOL;
-            if ($link) { $ongoing .= 'Link:' . PHP_EOL . $link . PHP_EOL; }
-            $ongoing .= PHP_EOL;
-        }
-
-        $placeholders = [
-            '{{REPORT_TITLE}}' => 'IT Project Status Update',
-            '{{REPORT_DATE}}' => 'As of ' . date('F d, Y'),
-            '{{COMPLETED_LIST}}' => $completed,
-            '{{ONGOING_LIST}}' => $ongoing,
-            '{{ON_HOLD_LIST}}' => $onhold,
-            '{{NOT_STARTED_LIST}}' => $notstarted,
-            '{{ALL_TRACKER_LINK}}' => 'https://itpms.infinityfreeapp.com/manager.php',
-        ];
-
-        // Replace placeholders in all text shapes
-        foreach ($ppt->getAllSlides() as $slide) {
-            foreach ($slide->getShapeCollection() as $shape) {
-                // RichText shapes
-                if ($shape instanceof \PhpOffice\PhpPresentation\Shape\RichText) {
-                    foreach ($shape->getParagraphs() as $p) {
-                        foreach ($p->getRichTextElements() as $rte) {
-                            if ($rte instanceof \PhpOffice\PhpPresentation\Shape\RichText\TextElement) {
-                                $text = $rte->getText();
-                                $new = strtr($text, $placeholders);
-                                if ($new !== $text) { $rte->setText($new); }
-                            }
-                        }
-                    }
-                } else {
-                    // Some shapes expose getText/setText
-                    if (method_exists($shape, 'getText') && method_exists($shape, 'setText')) {
-                        try {
-                            $text = $shape->getText();
-                            $new = strtr($text, $placeholders);
-                            if ($new !== $text) { $shape->setText($new); }
-                        } catch (Throwable $e) { /* ignore shapes that don't support text access */ }
-                    }
-                }
-            }
-        }
-
-        // Stream PPTX to client
-        header('Content-Type: application/vnd.openxmlformats-officedocument.presentationml.presentation');
-        header('Content-Disposition: attachment; filename="IT_Project_Status_Update_' . date('Ymd') . '.pptx"');
-
-        $writer = \PhpOffice\PhpPresentation\IOFactory::createWriter($ppt, 'PowerPoint2007');
-        $writer->save('php://output');
-        exit;
-    } catch (Throwable $e) {
-        http_response_code(500);
-        echo 'Export error: ' . $e->getMessage();
-        exit;
-    }
-}
+use PhpOffice\PhpPresentation\IOFactory;
 
 
 function mgr_is_overdue(array $p): bool {
@@ -227,7 +116,6 @@ try {
     <div class="top-bar-right">
       <span class="read-only-badge"><i data-lucide="lock"></i> Read only</span>
       <div class="status-line"><span class="live-dot"></span>Live · last updated <b id="lastUpdated">just now</b></div>
-      <button id="exportTxtBtn" class="btn export-btn" title="Export status as text"><i data-lucide="download"></i> Export</button>
     </div>
   </div>
 

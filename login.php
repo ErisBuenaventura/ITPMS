@@ -60,7 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <label class="field"><span>Password</span><input type="password" name="password" autocomplete="current-password" required></label>
       <button type="submit" class="btn">Log in</button>
     </form>
-    <p class="hint">First time here? Default login is <b>admin</b> / <b>admin123</b> — change it right after signing in.</p>
+    <p class="hint"><b>Login here.</b></p>
   </div>
 </div>
 </body>

@@ -12,22 +12,21 @@ html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); fo
 .mono { font-family: 'IBM Plex Mono', monospace; }
 .view-hidden { display: none !important; }
 
-/* Desktop/laptop/tablet: no page scroll, dashboard scales to fit.
-   Phone: page scroll is allowed (see media query below) — a data
-   dashboard squeezed into a phone screen with no scroll at all
-   stops being readable, so phones get a normal scrolling list. */
+/* Desktop/laptop/tablet: no page scroll — the dashboard fills the
+   viewport height via flex, not a JS-computed transform scale. A scale
+   trick only knows how to shrink content that's too tall; it was never
+   built to grow content to fill leftover space, which is what caused
+   the "compressed at the top, empty space below" look. Flex-fill solves
+   both directions at once: too-short content stretches to fill the
+   screen, too-tall content just scrolls within its own panel instead
+   (see .table-scroll / .chart-box below). */
 html, body { height: 100%; overflow: hidden; }
 
 .page { display: flex; flex-direction: column; height: 100vh; padding: 30px 40px; }
 
-/* Small inner padding so panels don't touch the viewport edges when scaled */
-.fit-outer { padding: 6px; }
-
 @media (max-width: 960px) {
   .page { padding: 22px 24px; }
 }
-
-
 
 .top-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; flex-shrink: 0; }
 .brand { display: flex; align-items: center; gap: 10px; }
@@ -42,155 +41,143 @@ html, body { height: 100%; overflow: hidden; }
 .live-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--completed); margin-right: 5px; animation: pulse 1.6s infinite; }
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
 
-.fit-outer { flex: 1; min-height: 0; overflow-x: hidden; overflow-y: hidden; -webkit-overflow-scrolling: touch; position: relative; padding: 6px; }
-.fit-inner { position: absolute; top: 0; left: 0; transform-origin: top left; }
+/* ---------- fit-outer/fit-inner: now a normal flex column that fills
+   all remaining height below the top bar, instead of an absolutely
+   positioned block sized to its own content. #fitInner no longer needs
+   any transform:scale(...) applied to it by JS — if something still
+   sets one inline, remove that call; this layout doesn't need it. ---------- */
+.fit-outer { flex: 1; min-height: 0; display: flex; overflow: hidden; }
+.fit-inner { flex: 1; min-height: 0; width: 100%; display: flex; flex-direction: column; gap: 14px; transform: none !important; position: static !important; }
 
-.stat-grid { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; }
-.stat-card { --c: #2F5D8A; --s: #E8EFF6; background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--c); border-radius: 10px; padding: 12px 18px; flex: 1; min-width: 140px; }
-.stat-count { font-family: 'Space Grotesk', sans-serif; font-size: 24px; font-weight: 700; }
-.stat-label { font-size: 11.5px; color: var(--ink-soft); font-weight: 500; margin-top: 2px; }
+.stat-grid { display: flex; flex-wrap: wrap; gap: 12px; flex-shrink: 0; }
+.stat-card { --c: #2F5D8A; --s: #E8EFF6; background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--c); border-radius: 10px; padding: 16px 20px; flex: 1; min-width: 140px; }
+.stat-count { font-family: 'Space Grotesk', sans-serif; font-size: 28px; font-weight: 700; }
+.stat-label { font-size: 12px; color: var(--ink-soft); font-weight: 500; margin-top: 3px; }
 
-/* Overview panel: charts */
-.panel-body { padding: 12px 16px; }
-.chart-grid { display: flex; gap: 12px; align-items: stretch; }
-.chart-grid.single-chart { align-items: center; }
-.chart-box { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px; display: flex; align-items: center; justify-content: center; height: 160px; width: 100%; }
-.chart-box.full-width { height: 160px; width: 100%; }
-.chart-box canvas { width: 100% !important; height: 100% !important; }
+/* ---------- overview panel: charts. chart-box now flex-fills its
+   panel instead of a fixed 160px — that fixed height was the single
+   biggest contributor to the cramped look, since the chart panel had
+   far more vertical room available than 160px on most screens. ---------- */
+.panel-body { padding: 14px 18px; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.chart-grid { display: flex; gap: 12px; align-items: stretch; flex: 1; min-height: 0; }
+.chart-grid.single-chart { align-items: stretch; }
+.chart-box { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px; display: flex; align-items: center; justify-content: center; flex: 1; min-height: 0; width: 100%; overflow: hidden; }
+.chart-box.full-width { flex: 0 0 auto; min-height: 220px; height: 220px; max-height: 220px; width: 100%; }
+.chart-box canvas { width: 100% !important; height: 100% !important; max-height: 100% !important; }
 
 @media (max-width: 920px) {
   .chart-grid { flex-direction: column; }
-  .chart-box.full-width { height: 140px; }
+  .chart-box, .chart-box.full-width { min-height: 200px; height: 200px; max-height: 200px; }
 }
 
-.panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
-.panel-head { padding: 12px 20px; border-bottom: 1px solid #EDEFF3; font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 15px; }
+.panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; min-height: 0; transition: box-shadow .15s; }
+.panel:hover { box-shadow: 0 4px 18px rgba(27,36,48,0.05); }
+.panel-head { padding: 13px 20px; border-bottom: 1px solid #EDEFF3; font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 15.5px; flex-shrink: 0; }
 
-/* ---------- two-column layout: projects (left) + employee IT concerns (right) ---------- */
-.mgr-columns { display: flex; gap: 16px; align-items: flex-start; }
-/* Use 60/40 split on wider screens so requests column has more room */
-.mgr-col-left { flex: 0 0 60%; min-width: 0; }
-.mgr-col-right { flex: 0 0 40%; min-width: 0; }
+/* ---------- two-column layout: projects (left) + employee IT concerns
+   (right). Now fills remaining height (flex:1 on the row + min-height:0
+   on everything down the chain) so both panels stretch instead of
+   sitting at their minimum content height. ---------- */
+.mgr-columns { display: flex; gap: 16px; align-items: stretch; flex: 1; min-height: 0; }
+.mgr-col-left { flex: 0 0 60%; min-width: 0; display: flex; min-height: 0; }
+.mgr-col-right { flex: 0 0 40%; min-width: 0; display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+.mgr-col-left > .panel { flex: 1; }
+.mgr-col-right > .panel { min-height: 0; }
+/* The chart panel has no distinguishing class in the markup — it's just
+   .panel like every other panel. Target it by what it actually contains
+   instead of a class that was never there, so it sizes to its own
+   content (flex: 0 0 auto) while the Concerns panel below it gets the
+   real leftover space (flex: 1). */
+.mgr-col-right > .panel:has(.chart-grid) { flex: 0 0 auto; }
+.mgr-col-right > .panel:not(:has(.chart-grid)) { flex: 1; }
 
-/* revert to stacked columns on smaller screens */
 @media (max-width: 960px) {
-  .mgr-col-left, .mgr-col-right { flex: 1 0 100%; }
+  .mgr-col-left, .mgr-col-right { flex: 1 0 auto; }
+  .mgr-columns { flex-direction: column; }
 }
-.req-requester { font-size: 11px; color: #8A8F98; white-space: normal; }
-.req-date { white-space: nowrap; color: var(--ink-soft); font-size: 12px; }
 
-/* Stacked date/time for requests table so time appears below the date to reduce horizontal compression */
-.req-date { text-align: right; white-space: normal; }
+.req-requester { font-size: 11px; color: #8A8F98; white-space: normal; }
+.req-date { white-space: nowrap; color: var(--ink-soft); font-size: 12px; text-align: right; white-space: normal; }
 .req-date .req-date-day { display: block; font-size: 13px; color: var(--ink); font-weight: 600; }
 .req-date .req-date-time { display: block; font-size: 12px; color: var(--ink-soft); margin-top: 4px; }
 
 @media (max-width: 680px) {
-  /* On mobile stacked cards, show date/time left-aligned and compact */
   .req-date { text-align: left; }
   .req-date .req-date-day { font-size: 14px; }
   .req-date .req-date-time { font-size: 12px; margin-top: 2px; }
 }
 
-/* ---------- table (all screen sizes — scrolls horizontally when narrower than content) ---------- */
-.table-scroll { overflow-x: hidden; -webkit-overflow-scrolling: touch; }
-/* Allow the table to shrink to container width; use ellipsis or clamped two-line names */
+/* ---------- table: now scrolls internally within its own panel
+   (flex:1; min-height:0; overflow-y:auto) rather than the whole page
+   growing to fit every row — this is what lets the panel around it
+   stretch to fill available height cleanly. ---------- */
+.table-scroll { overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch; flex: 1; min-height: 0; }
 table.mgr-table { border-collapse: collapse; border-spacing: 0; width: 100%; min-width: 0; table-layout: fixed; }
 table.mgr-table.mgr-table-compact { min-width: 0; }
-table.mgr-table th { text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: #8A8F98; font-weight: 600; padding: 8px 12px; border-bottom: 1px solid #EDEFF3; white-space: nowrap; }
-/* Narrow fixed columns for index, files, and actions to remove large empty gaps */
-/* Keep most columns flexible so project name and other details can expand naturally */
+table.mgr-table th { text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: #8A8F98; font-weight: 600; padding: 9px 12px; border-bottom: 1px solid #EDEFF3; white-space: nowrap; position: sticky; top: 0; background: var(--surface); z-index: 1; }
 table.mgr-table th:nth-child(1), table.mgr-table td:nth-child(1) { width: 48px; text-align: center; padding-left: 8px; padding-right: 8px; }
-/* Small icon columns on the right */
 table.mgr-table th:nth-child(7), table.mgr-table td:nth-child(7), table.mgr-table th:nth-child(8), table.mgr-table td:nth-child(8) { width: 56px; text-align: center; padding-left: 8px; padding-right: 8px; }
 
-/* Let the browser size the remaining columns automatically (auto layout) */
 @supports (table-layout: auto) {
   table.mgr-table { table-layout: auto; }
 }
 
-/* Ensure readable left alignment for titles and requester names */
-
-/* Explicit column width allocation to avoid odd empty gutters on wide screens */
 @media (min-width: 961px) {
-  /* Use automatic table layout on wide screens and fix only narrow columns.
-     Let the Project column auto-fill the remaining width to avoid empty gutters. */
   table.mgr-table { table-layout: auto; }
   table.mgr-table th:nth-child(1), table.mgr-table td:nth-child(1) { width: 48px; }
-  /* Project column left to auto size (fills remaining space) */
   table.mgr-table th:nth-child(2), table.mgr-table td:nth-child(2) { width: auto; }
-  /* Fixed-ish narrow columns to keep layout tight */
   table.mgr-table th:nth-child(3), table.mgr-table td:nth-child(3) { width: 110px; }
   table.mgr-table th:nth-child(4), table.mgr-table td:nth-child(4) { width: 90px; }
   table.mgr-table th:nth-child(5), table.mgr-table td:nth-child(5) { width: 220px; }
   table.mgr-table th:nth-child(6), table.mgr-table td:nth-child(6) { width: 120px; }
   table.mgr-table th:nth-child(7), table.mgr-table td:nth-child(7) { width: 56px; }
   table.mgr-table th:nth-child(8), table.mgr-table td:nth-child(8) { width: 56px; }
-  /* Requests compact table: give first column more space */
   table.mgr-table.mgr-table-compact th:nth-child(1), table.mgr-table.mgr-table-compact td:nth-child(1) { width: 45%; }
 }
 
-
 table.mgr-table td, table.mgr-table th { text-align: left; }
 table.mgr-table td:nth-child(1), table.mgr-table th:nth-child(1) { text-align: center; }
-
 table.mgr-table.mgr-table-compact td:first-child, table.mgr-table.mgr-table-compact th:first-child { text-align: left; }
-
-/* Tighten padding in icon columns */
 table.mgr-table td:nth-child(7), table.mgr-table td:nth-child(8) { padding-left: 6px; padding-right: 6px; }
-
-/* Files cell: center the icon */
 .files-cell { display: flex; align-items: center; justify-content: center; }
-
-/* Keep request titles left-aligned and readable */
 .mgr-table-compact td:first-child, .mgr-table-compact th:first-child { text-align: left; }
 .req-requester { text-align: left; }
 .req-date { text-align: left; }
 
-/* keep most cells single-line but allow the project/request name to wrap up to 2 lines */
-table.mgr-table td { padding: 8px 10px; border-bottom: 1px solid #F2F3F5; vertical-align: middle; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* Remove narrow gutter between Project and Owner by tightening side paddings */
+/* row padding opened up slightly now that panels have real room to
+   breathe instead of being squeezed to minimum content height */
+table.mgr-table td { padding: 10px 12px; border-bottom: 1px solid #F2F3F5; vertical-align: middle; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 table.mgr-table th:nth-child(2), table.mgr-table td:nth-child(2) { padding-right: 6px; }
 table.mgr-table th:nth-child(3), table.mgr-table td:nth-child(3) { padding-left: 6px; }
-/* Tighten requests panel columns: reduce gap between Request and Category */
-/* Slightly smaller horizontal padding for compact table cells */
-table.mgr-table.mgr-table-compact th, table.mgr-table.mgr-table-compact td { padding: 6px 8px; }
-/* Category column centered */
+table.mgr-table.mgr-table-compact th, table.mgr-table.mgr-table-compact td { padding: 8px 10px; }
 table.mgr-table.mgr-table-compact th:nth-child(2), table.mgr-table.mgr-table-compact td:nth-child(2) { text-align: center; padding-left: 6px; padding-right: 6px; }
-/* Reduce padding on Request column to bring Category closer */
 table.mgr-table.mgr-table-compact th:nth-child(1), table.mgr-table.mgr-table-compact td:nth-child(1) { padding-right: 6px; }
 
-/* On wide screens shrink the Request column to content width so Category sits immediately after it */
 @media (min-width: 961px) {
-  /* Allow the Request column more room and wrap the title to two lines */
   table.mgr-table.mgr-table-compact th:nth-child(1), table.mgr-table.mgr-table-compact td:nth-child(1) { width: auto; max-width: 420px; white-space: normal; }
-  table.mgr-table.mgr-table-compact td .proj-name { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  table.mgr-table.mgr-table-compact td .proj-name { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   table.mgr-table.mgr-table-compact th:nth-child(2), table.mgr-table.mgr-table-compact td:nth-child(2) { width: 120px; text-align: center; }
 }
 
-.proj-name { font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; white-space: normal; max-width: 100%; line-height: 1.15; }
-/* Requests table: allow wider first column for readable titles */
-/* Requests table: do not enforce rigid widths — allow natural sizing for compact view */
-/* Width rules removed to prevent vertical character-wrapping on small screens */
+.proj-name { font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; white-space: normal; max-width: 100%; line-height: 1.2; }
 table.mgr-table.mgr-table-compact th:nth-child(2), table.mgr-table.mgr-table-compact td:nth-child(2) { width: 120px; }
 table.mgr-table.mgr-table-compact th:nth-child(3), table.mgr-table.mgr-table-compact td:nth-child(3) { width: 110px; }
 table.mgr-table.mgr-table-compact th:nth-child(4), table.mgr-table.mgr-table-compact td:nth-child(4) { width: 140px; }
 table.mgr-table.mgr-table-compact th:nth-child(5), table.mgr-table.mgr-table-compact td:nth-child(5) { width: 120px; }
 .proj-id { font-size: 10.5px; color: #8A8F98; font-weight: 500; margin-left: 6px; }
+
 @media (max-width: 920px) {
-  table.mgr-table th, table.mgr-table td { padding: 6px 8px; font-size: 12px; }
-  .proj-name { -webkit-line-clamp: 2; }
+  table.mgr-table th, table.mgr-table td { padding: 7px 8px; font-size: 12px; }
+  .proj-name { -webkit-line-clamp: 2; line-clamp: 2; }
 }
 @media (max-width: 680px) {
-  table.mgr-table th, table.mgr-table td { padding: 4px 6px; font-size: 11px; }
-  .proj-name { -webkit-line-clamp: 2; font-size: 12px; }
+  table.mgr-table th, table.mgr-table td { padding: 5px 6px; font-size: 11px; }
+  .proj-name { -webkit-line-clamp: 2; line-clamp: 2; font-size: 12px; }
 }
+
 table.mgr-table tbody tr:last-child td { border-bottom: none; }
 table.mgr-table tbody tr { transition: background-color .1s; }
 table.mgr-table tbody tr:hover { background-color: #FAFBFC; }
-.panel { transition: box-shadow .15s; }
-.panel:hover { box-shadow: 0 4px 18px rgba(27,36,48,0.05); }
-.proj-name { font-weight: 600; }
-.proj-id { font-size: 10.5px; color: #8A8F98; font-weight: 500; margin-left: 6px; }
 .overdue-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--cancelled); margin-left: 6px; vertical-align: middle; }
 .empty-row { text-align: center; color: #8A8F98; padding: 24px 0 !important; }
 .empty-icon { display: block; width: 28px; height: 28px; margin: 0 auto 8px; color: #C7CBD3; }
@@ -236,49 +223,134 @@ table.mgr-table tbody tr:hover { background-color: #FAFBFC; }
   .view-details { border-right: none; border-bottom: 1px solid #EDEFF3; }
 }
 
-@media (max-width: 960px) {
-  .mgr-columns { flex-direction: column; }
-}
-
-/* ---------- PHONE breakpoint: page scrolls vertically; the table itself
-   scrolls horizontally within .table-scroll (see above) so every column
-   stays reachable — no data is ever hidden on small screens. ---------- */
+/* ---------- PHONE breakpoint: page scrolls vertically here — a data
+   dashboard squeezed into a phone screen with no scroll at all stops
+   being readable, so phones keep the exception. The table itself still
+   scrolls internally within .table-scroll on larger screens; on phone
+   it converts to stacked cards below. ---------- */
 @media (max-width: 680px) {
   html, body { height: auto; overflow: auto; }
   .page { height: auto; padding: 12px 10px 20px; }
-  .fit-outer { overflow: visible; }
-  .fit-inner { position: static; transform: none !important; width: 100%; }
+  .fit-outer { overflow: visible; height: auto; }
+  .fit-inner { width: 100%; height: auto; }
   .mgr-columns { flex-direction: column; gap: 12px; }
   .status-line { text-align: left; }
 
-  /* Convert wide table into stacked cards for mobile so nothing is clipped */
+  /* Reorder on mobile: stat cards (already above .mgr-columns) → chart →
+     All Projects → Employee IT Concerns. display:contents removes the
+     .mgr-col-left/.mgr-col-right wrapper divs from the box model without
+     touching the actual HTML — their children become direct items of
+     .mgr-columns, so `order` can freely interleave panels that were
+     originally split across the two desktop columns. */
+  .mgr-col-left, .mgr-col-right { display: contents; }
+  .mgr-col-right > .panel:has(.chart-grid) { order: 1; }
+  .mgr-col-left > .panel { order: 2; }
+  .mgr-col-right > .panel:not(:has(.chart-grid)) { order: 3; }
+
   .table-scroll { overflow: visible; }
   table.mgr-table { display: block; }
   table.mgr-table thead { display: none; }
   table.mgr-table tbody { display: block; }
-  table.mgr-table tr { display: block; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 12px; padding: 12px; }
-  table.mgr-table td { display: block; width: 100%; padding: 6px 0; border-bottom: none; white-space: normal; overflow: hidden; }
-  table.mgr-table td .proj-name { -webkit-line-clamp: 2; font-size: 14px; line-height: 1.2; }
-  table.mgr-table td .proj-id { display: block; margin-top: 6px; color: #8A8F98; font-size: 12px; }
-  table.mgr-table td:nth-child(1) { display: none; }
-  table.mgr-table td:nth-child(7), table.mgr-table td:nth-child(8) { display: inline-block; width: auto; padding: 6px; }
-  .pbar-wrap { width: 100%; }
 
-  /* Compact requests - stacked cards */
+  /* Project cards: grid instead of sparse stacked blocks, with labels
+     on Owner/Priority/Status so a bare "Eris" or "Low" sitting alone
+     with a lot of surrounding whitespace becomes a labeled field
+     instead — same fix pattern as the Concerns cards. */
+  table.mgr-table tr {
+    display: grid; grid-template-columns: 1fr 1fr auto auto; column-gap: 10px; row-gap: 10px; align-items: center;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 12px; padding: 14px 16px;
+  }
+  table.mgr-table td { display: block; width: auto; padding: 0; border-bottom: none; white-space: normal; overflow: visible; }
+  table.mgr-table td:nth-child(1) { display: none; }
+  table.mgr-table td:nth-child(2) { grid-column: 1 / -1; grid-row: 1; }
+  table.mgr-table td:nth-child(3) { grid-column: 1; grid-row: 2; }
+  table.mgr-table td:nth-child(4) { grid-column: 2 / -1; grid-row: 2; }
+  table.mgr-table td:nth-child(5) { grid-column: 1 / -1; grid-row: 3; }
+  table.mgr-table td:nth-child(6) { grid-column: 1 / 3; grid-row: 4; justify-self: start; }
+  table.mgr-table td:nth-child(7) { grid-column: 3; grid-row: 4; justify-self: center; }
+  table.mgr-table td:nth-child(8) { grid-column: 4; grid-row: 4; justify-self: center; }
+
+  table.mgr-table td .proj-name { -webkit-line-clamp: 2; font-size: 14.5px; line-height: 1.3; }
+  table.mgr-table td .proj-id { display: block; margin-top: 4px; color: #8A8F98; font-size: 12px; }
+
+  table.mgr-table td:nth-child(3)::before,
+  table.mgr-table td:nth-child(4)::before {
+    display: block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+    color: var(--ink-soft); opacity: .75; margin-bottom: 3px;
+  }
+  table.mgr-table td:nth-child(3)::before { content: "Owner"; }
+  table.mgr-table td:nth-child(4)::before { content: "Priority"; }
+  table.mgr-table td:nth-child(3), table.mgr-table td:nth-child(4) {
+    font-size: 13.5px; font-weight: 600; color: var(--ink);
+    padding-top: 8px; border-top: 1px dashed var(--border);
+  }
+  table.mgr-table td:nth-child(5) { padding-top: 4px; }
+  .pbar-wrap { width: 100%; }
+  table.mgr-table td:nth-child(7), table.mgr-table td:nth-child(8) { padding: 0; }
+
   table.mgr-table.mgr-table-compact { display: block; }
   table.mgr-table.mgr-table-compact thead { display: none; }
   table.mgr-table.mgr-table-compact tbody { display: block; }
-  table.mgr-table.mgr-table-compact tr { display: block; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 10px; padding: 12px; }
-  table.mgr-table.mgr-table-compact td { display: block; width: 100%; padding: 6px 0; white-space: normal; }
+  /* Grid instead of inline-block: inline-block wraps based on leftover
+     width on the current line, which is why "Issued" was drifting up
+     next to the badges instead of starting its own row — it had room
+     to fit there, so it did. Grid gives every field an exact row/column,
+     so nothing can drift regardless of content length or how much room
+     neighbors take up. */
+  table.mgr-table.mgr-table-compact tr {
+    display: grid; grid-template-columns: 1fr 1fr; column-gap: 12px; row-gap: 8px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 10px; padding: 14px 16px;
+  }
+  table.mgr-table.mgr-table-compact td { display: block; width: 100%; padding: 0; white-space: normal; }
+  table.mgr-table.mgr-table-compact td:nth-child(1) { grid-column: 1 / -1; grid-row: 1; }
+  table.mgr-table.mgr-table-compact td:nth-child(2) { grid-column: 1; grid-row: 2; justify-self: start; }
+  table.mgr-table.mgr-table-compact td:nth-child(3) { grid-column: 2; grid-row: 2; justify-self: start; }
+  table.mgr-table.mgr-table-compact td:nth-child(4) { grid-column: 1; grid-row: 3; }
+  table.mgr-table.mgr-table-compact td:nth-child(5) { grid-column: 2; grid-row: 3; }
 
-  /* Make request title prominent and left-aligned, show requester below it */
-  table.mgr-table.mgr-table-compact td:first-child { font-size: 14px; font-weight: 600; color: var(--ink); }
-  table.mgr-table.mgr-table-compact td:first-child .req-requester { display: block; margin-top: 6px; color: var(--ink-soft); font-size: 12px; }
-  /* Show category and status badges inline on the next line */
-  table.mgr-table.mgr-table-compact td:nth-child(2), table.mgr-table.mgr-table-compact td:nth-child(3) { display: inline-block; margin-right: 8px; }
-  table.mgr-table.mgr-table-compact td:nth-child(4), table.mgr-table.mgr-table-compact td:nth-child(5) { display: block; margin-top: 8px; color: var(--ink-soft); font-size: 12px; }
+  /* Request title + requester — forced to wrap fully and stay visible.
+     The base `.proj-name` rule (line-clamp:2 + overflow:hidden) and the
+     base table td rule (overflow:hidden) were both written for the
+     dense desktop table; on this stacked mobile card there's no reason
+     to truncate a request title, so both get explicitly undone here. */
+  table.mgr-table.mgr-table-compact td:first-child {
+    font-size: 14.5px; font-weight: 600; color: var(--ink);
+    white-space: normal; overflow: visible; text-overflow: clip;
+  }
+  table.mgr-table.mgr-table-compact td:first-child .proj-name,
+  table.mgr-table.mgr-table-compact td:first-child .req-title {
+    display: block; -webkit-line-clamp: unset; line-clamp: unset; overflow: visible;
+    text-overflow: clip; white-space: normal; line-height: 1.35;
+  }
+  table.mgr-table.mgr-table-compact td:first-child .req-requester { display: block; margin-top: 4px; color: var(--ink-soft); font-size: 12px; }
 
-  /* Ensure panels use full width and align with cards */
+  /* Issued / Resolved: labeled, placed in the grid's row 3 (see above) */
+  table.mgr-table.mgr-table-compact td:nth-child(4),
+  table.mgr-table.mgr-table-compact td:nth-child(5) {
+    padding-top: 10px; border-top: 1px dashed var(--border);
+    color: var(--ink-soft); font-size: 12px;
+  }
+  table.mgr-table.mgr-table-compact td:nth-child(4)::before,
+  table.mgr-table.mgr-table-compact td:nth-child(5)::before {
+    display: block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+    color: var(--ink-soft); opacity: .75; margin-bottom: 3px;
+  }
+  table.mgr-table.mgr-table-compact td:nth-child(4)::before { content: "Issued"; }
+  table.mgr-table.mgr-table-compact td:nth-child(5)::before { content: "Resolved"; }
+  table.mgr-table.mgr-table-compact .req-date-day { font-size: 13px; color: var(--ink); font-weight: 600; }
+  table.mgr-table.mgr-table-compact .req-date-time { font-size: 12px; color: var(--ink-soft); margin-top: 1px; }
+
   .panel { width: 100%; }
   .mgr-col-left, .mgr-col-right { width: 100%; }
+
+  /* Chart clipping fix: the base .chart-box rule is flex:1; min-height:0
+     (correct for desktop, where the flex chain has real height to give
+     it). On mobile the "Projects — 2026" chart's container may not carry
+     the .full-width modifier that had the only real height floor — so it
+     was collapsing toward that 0 and getting its top clipped by the
+     panel's overflow:hidden. Every .chart-box now gets a guaranteed floor
+     here regardless of modifier, and the panel wrapping it gets one too
+     so the flex chain has something real to resolve against. */
+  .chart-box, .chart-box.full-width { min-height: 220px; height: 220px; max-height: 220px; resize: none; }
+  .mgr-col-right > .panel:has(.chart-grid) { min-height: 0; }
 }

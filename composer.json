@@ -1,0 +1,12 @@
+{
+    "name": "itpms/itpms",
+    "authors": [
+        {
+            "name": "Eris Buenaventura",
+            "email": "125533906+ErisBuenaventura@users.noreply.github.com"
+        }
+    ],
+    "require": {
+        "phpoffice/phppresentation": "^0.9.0"
+    }
+}

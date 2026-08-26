@@ -29,6 +29,16 @@ if (!$configFound) {
 }
 require_once $configFound;
 
+use PhpOffice\PhpPresentation\IOFactory;
+use PhpOffice\PhpPresentation\PhpPresentation;
+use PhpOffice\PhpPresentation\Shape\RichText;
+use PhpOffice\PhpPresentation\Shape\RichText\TextElement;
+use PhpOffice\PhpPresentation\Style\Color;
+
+if (file_exists(__DIR__ . '/vendor/autoload.php')) {
+    require_once __DIR__ . '/vendor/autoload.php';
+}
+
 header('Content-Type: application/json');
 
 $method = $_SERVER['REQUEST_METHOD'];
