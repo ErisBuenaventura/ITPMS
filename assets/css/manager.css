@@ -270,7 +270,7 @@ table.mgr-table tbody tr:hover { background-color: #FAFBFC; }
   table.mgr-table td:nth-child(7) { grid-column: 3; grid-row: 4; justify-self: center; }
   table.mgr-table td:nth-child(8) { grid-column: 4; grid-row: 4; justify-self: center; }
 
-  table.mgr-table td .proj-name { -webkit-line-clamp: 2; font-size: 14.5px; line-height: 1.3; }
+  table.mgr-table td .proj-name { -webkit-line-clamp: 2; line-clamp: 2; font-size: 14.5px; line-height: 1.3; }
   table.mgr-table td .proj-id { display: block; margin-top: 4px; color: #8A8F98; font-size: 12px; }
 
   table.mgr-table td:nth-child(3)::before,
