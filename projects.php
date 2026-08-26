@@ -5,6 +5,7 @@
  *
  *   GET    projects.php            -> list all projects (no history, for tables/cards)
  *   GET    projects.php?id=PRJ-1   -> single project + full progress history (for the view modal)
+ *   GET    projects.php?export=1&format=pptx -> export the fixed 10-slide MANCOM report
  *   POST   projects.php            -> create a project        (JSON body)
  *   PUT    projects.php?id=PRJ-1   -> update a project         (JSON body)
  *   DELETE projects.php?id=PRJ-1   -> delete a project
@@ -28,16 +29,6 @@ if (!$configFound) {
     exit;
 }
 require_once $configFound;
-
-use PhpOffice\PhpPresentation\IOFactory;
-use PhpOffice\PhpPresentation\PhpPresentation;
-use PhpOffice\PhpPresentation\Shape\RichText;
-use PhpOffice\PhpPresentation\Shape\RichText\TextElement;
-use PhpOffice\PhpPresentation\Style\Color;
-
-if (file_exists(__DIR__ . '/vendor/autoload.php')) {
-    require_once __DIR__ . '/vendor/autoload.php';
-}
 
 header('Content-Type: application/json');
 
@@ -74,6 +65,54 @@ function fail(int $code, string $message): void {
     exit;
 }
 
+/**
+ * Locate the fixed MANCOM report template (a static 10-slide .pptx).
+ * Looks for the known filename first, then falls back to any .pptx in the templates dir.
+ */
+function find_mancom_template(string $templatesDir): ?string {
+    $candidates = [
+        $templatesDir . '/IT_DEPARTMENT_MANCOM_REPORT.pptx',
+        $templatesDir . '/IT_DEPARTMENT_MANCOM_REPORT_2_0.pptx',
+    ];
+    foreach ($candidates as $c) {
+        if (file_exists($c)) return $c;
+    }
+
+    $matches = glob($templatesDir . '/IT DEPARTMENT MANCOM REPORT*.pptx');
+    if ($matches && count($matches)) {
+        usort($matches, function ($a, $b) { return filemtime($b) - filemtime($a); });
+        return $matches[0];
+    }
+
+    $all = glob($templatesDir . '/*.pptx');
+    if ($all && count($all)) {
+        usort($all, function ($a, $b) { return filemtime($b) - filemtime($a); });
+        return $all[0];
+    }
+
+    return null;
+}
+
+/**
+ * Slide 4 style: label and number share ONE run, e.g. "<a:t>Completed Projects: 6</a:t>".
+ * Replaces the trailing number after "$label: " while leaving the label text untouched.
+ */
+function pptx_replace_inline_count(string $xml, string $label, $value): string {
+    $pattern = '/(<a:t>' . preg_quote($label, '/') . ':\s*)\d+(<\/a:t>)/';
+    $replaced = preg_replace($pattern, '${1}' . (int) $value . '${2}', $xml, 1);
+    return $replaced !== null ? $replaced : $xml;
+}
+
+/**
+ * Slide 6 style: a table cell holding the status label, immediately followed
+ * (with no other <a:t> in between) by the cell holding its count.
+ */
+function pptx_replace_table_count(string $xml, string $label, $value): string {
+    $pattern = '/(<a:t>' . preg_quote($label, '/') . '<\/a:t>.*?<a:t>)\d+(<\/a:t>)/s';
+    $replaced = preg_replace($pattern, '${1}' . (int) $value . '${2}', $xml, 1);
+    return $replaced !== null ? $replaced : $xml;
+}
+
 switch ($method) {
 
     /* ---------------------------------------------------------- GET */
@@ -97,147 +136,86 @@ switch ($method) {
                 $r['budget']   = (float) $r['budget'];
                 $r['progress'] = (int) $r['progress'];
             }
+            unset($r);
 
             // Combined PPT export: projects.php?export=1&format=pptx
-            if (isset($_GET['export']) && (isset($_GET['format']) && $_GET['format'] === 'pptx')) {
+            // Produces the fixed 10-slide MANCOM report from a static template.
+            // Only two slides carry live data (project status counts); every other
+            // slide (Objectives, Org Chart, Monthly Highlights, Department
+            // Contribution, Issues/Concerns, Action Plans) is copied byte-for-byte
+            // from the template, so nothing about its design/branding can drift.
+            if (isset($_GET['export']) && isset($_GET['format']) && $_GET['format'] === 'pptx') {
+                if (!class_exists('ZipArchive')) {
+                    http_response_code(500);
+                    echo "The PHP zip extension is required to export the report. Please enable it on your server.";
+                    exit;
+                }
+
                 $templatesDir = __DIR__ . '/assets/templates';
-                $exact = $templatesDir . '/IT_DEPARTMENT_MANCOM_REPORT.pptx';
-                $template = null;
+                $template = find_mancom_template($templatesDir);
 
-                if (file_exists($exact)) {
-                    $template = $exact;
-                } else {
-                    $matches = glob($templatesDir . '/IT DEPARTMENT MANCOM REPORT*.pptx');
-                    if ($matches && count($matches)) {
-                        usort($matches, function($a, $b) { return filemtime($b) - filemtime($a); });
-                        $template = $matches[0];
-                    } else {
-                        $all = glob($templatesDir . '/*.pptx');
-                        if ($all && count($all)) {
-                            usort($all, function($a, $b) { return filemtime($b) - filemtime($a); });
-                            $template = $all[0];
-                        }
-                    }
-                }
-
-                if (!file_exists($template)) {
+                if (!$template) {
                     http_response_code(500);
-                    echo "PPTX template not found in: {$templatesDir}. Please place a template PPTX there.";
+                    echo "MANCOM report template (.pptx) not found in: {$templatesDir}. Please place it there.";
                     exit;
                 }
 
-                $autoload = __DIR__ . '/vendor/autoload.php';
-                if (!file_exists($autoload)) {
+                // Tally live counts per status for the two data-driven slides:
+                //   Slide 4 — "Current Workload Summary"
+                //   Slide 6 — "IT Project Performance Dashboard" table
+                $statusCounts = ['Completed' => 0, 'Ongoing' => 0, 'Onhold' => 0, 'Not Started' => 0, 'Cancelled' => 0];
+                foreach ($rows as $p) {
+                    $s = $p['status'] ?? '';
+                    if (isset($statusCounts[$s])) $statusCounts[$s]++;
+                }
+                $completedCount  = $statusCounts['Completed'];
+                $ongoingCount    = $statusCounts['Ongoing'];
+                $onHoldCount     = $statusCounts['Onhold'];
+                $notStartedCount = $statusCounts['Not Started'];
+
+                $tmpFile = tempnam(sys_get_temp_dir(), 'mancom_') . '.pptx';
+                if (!copy($template, $tmpFile)) {
                     http_response_code(500);
-                    echo "PHPPresentation not installed. Run in your project root: composer require phpoffice/phppresentation";
+                    echo "Could not prepare the report file for export.";
                     exit;
                 }
-                require_once $autoload;
 
                 try {
-                    // Load template (keeps title/branding slides)
-                    $pptTemplate = \PhpOffice\PhpPresentation\IOFactory::load($template);
-
-                    // Find a slide in the template that contains the project-placeholder {{PROJECT_NAME}}
-                    $templateProjectSlide = null;
-                    foreach ($pptTemplate->getAllSlides() as $s) {
-                        foreach ($s->getShapeCollection() as $shape) {
-                            if ($shape instanceof \PhpOffice\PhpPresentation\Shape\RichText) {
-                                foreach ($shape->getParagraphs() as $pgr) {
-                                    foreach ($pgr->getRichTextElements() as $rte) {
-                                        if ($rte instanceof \PhpOffice\PhpPresentation\Shape\RichText\TextElement) {
-                                            if (strpos($rte->getText(), '{{PROJECT_NAME}}') !== false) { $templateProjectSlide = $s; break 3; }
-                                        }
-                                    }
-                                }
-                            } else {
-                                if (method_exists($shape, 'getText')) {
-                                    try { if (strpos($shape->getText(), '{{PROJECT_NAME}}') !== false) { $templateProjectSlide = $s; break 3; } } catch (Throwable $e) { }
-                                }
-                            }
-                        }
+                    $zip = new ZipArchive();
+                    if ($zip->open($tmpFile) !== true) {
+                        throw new RuntimeException('Could not open the report template.');
                     }
 
-                    // Create a fresh presentation to assemble title slides + project slides
-                    $out = new \PhpOffice\PhpPresentation\PhpPresentation();
-
-                    // Copy all template slides except the placeholder slide into $out
-                    foreach ($pptTemplate->getAllSlides() as $slide) {
-                        if ($templateProjectSlide !== null && $slide === $templateProjectSlide) continue;
-                        $out->addSlide(clone $slide);
+                    // Slide 4: lines like "Completed Projects: 6" — label + number in one run.
+                    $slide4 = $zip->getFromName('ppt/slides/slide4.xml');
+                    if ($slide4 !== false) {
+                        $slide4 = pptx_replace_inline_count($slide4, 'Completed Projects', $completedCount);
+                        $slide4 = pptx_replace_inline_count($slide4, 'Ongoing Projects', $ongoingCount);
+                        $slide4 = pptx_replace_inline_count($slide4, 'On Hold Projects', $onHoldCount);
+                        $slide4 = pptx_replace_inline_count($slide4, 'Not Started Projects', $notStartedCount);
+                        $zip->addFromString('ppt/slides/slide4.xml', $slide4);
                     }
 
-                    if ($templateProjectSlide !== null) {
-                        // For each project: clone the template project slide, replace placeholders, and add to output
-                        foreach ($rows as $p) {
-                            $newSlide = clone $templateProjectSlide;
-                            $placeholders = [
-                                '{{PROJECT_NAME}}' => $p['name'] ?? '',
-                                '{{STATUS}}' => $p['status'] ?? '',
-                                '{{PROGRESS}}' => (string)((int)($p['progress'] ?? 0)) . '%',
-                                '{{OWNER}}' => $p['owner'] ?? '',
-                                '{{START_DATE}}' => $p['start_date'] ?? '',
-                                '{{END_DATE}}' => $p['end_date'] ?? '',
-                                '{{DESCRIPTION}}' => trim($p['description'] ?? ''),
-                            ];
-
-                            foreach ($newSlide->getShapeCollection() as $shape) {
-                                if ($shape instanceof \PhpOffice\PhpPresentation\Shape\RichText) {
-                                    foreach ($shape->getParagraphs() as $pgr) {
-                                        foreach ($pgr->getRichTextElements() as $rte) {
-                                            if ($rte instanceof \PhpOffice\PhpPresentation\Shape\RichText\TextElement) {
-                                                $text = $rte->getText();
-                                                $new = strtr($text, $placeholders);
-                                                if ($new !== $text) { $rte->setText($new); }
-                                            }
-                                        }
-                                    }
-                                } else {
-                                    if (method_exists($shape, 'getText') && method_exists($shape, 'setText')) {
-                                        try {
-                                            $text = $shape->getText();
-                                            $new = strtr($text, $placeholders);
-                                            if ($new !== $text) { $shape->setText($new); }
-                                        } catch (Throwable $e) { /* ignore shapes we can't read */ }
-                                    }
-                                }
-                            }
-
-                            $out->addSlide($newSlide);
-                        }
-                    } else {
-                        // Fallback: create simple project-detail slides if template placeholder not found
-                        foreach ($rows as $p) {
-                            $slide = $out->createSlide();
-
-                            $titleShape = $slide->createRichTextShape();
-                            $titleShape->setHeight(80)->setWidth(860)->setOffsetX(50)->setOffsetY(40);
-                            $titleRun = $titleShape->createTextRun($p['name'] ?? 'Untitled Project');
-                            $titleRun->getFont()->setBold(true)->setSize(36)->setName('Space Grotesk')->setColor(new \PhpOffice\PhpPresentation\Style\Color('000080'));
-
-                            $metaShape = $slide->createRichTextShape();
-                            $metaShape->setHeight(60)->setWidth(860)->setOffsetX(50)->setOffsetY(120);
-                            $metaText = sprintf("Status: %s    Progress: %d%%    Owner: %s    Start: %s    End: %s",
-                                $p['status'] ?? 'Unknown', (int)($p['progress'] ?? 0), $p['owner'] ?? '-', $p['start_date'] ?? '-', $p['end_date'] ?? '-');
-                            $metaRun = $metaShape->createTextRun($metaText);
-                            $metaRun->getFont()->setSize(14)->setName('Inter')->setColor(new \PhpOffice\PhpPresentation\Style\Color('000000'));
-
-                            $descShape = $slide->createRichTextShape();
-                            $descShape->setHeight(300)->setWidth(860)->setOffsetX(50)->setOffsetY(180);
-                            $desc = trim($p['description'] ?? '');
-                            if (strlen($desc) > 800) { $desc = substr($desc, 0, 800) . '...'; }
-                            $descRun = $descShape->createTextRun($desc ?: '-');
-                            $descRun->getFont()->setSize(16)->setName('Inter')->setColor(new \PhpOffice\PhpPresentation\Style\Color('000000'));
-                        }
+                    // Slide 6: dashboard table — status-label cell, followed by its count cell.
+                    $slide6 = $zip->getFromName('ppt/slides/slide6.xml');
+                    if ($slide6 !== false) {
+                        $slide6 = pptx_replace_table_count($slide6, 'Completed', $completedCount);
+                        $slide6 = pptx_replace_table_count($slide6, 'Ongoing', $ongoingCount);
+                        $slide6 = pptx_replace_table_count($slide6, 'On Hold', $onHoldCount);
+                        $slide6 = pptx_replace_table_count($slide6, 'Not Started', $notStartedCount);
+                        $zip->addFromString('ppt/slides/slide6.xml', $slide6);
                     }
+
+                    $zip->close();
 
                     header('Content-Type: application/vnd.openxmlformats-officedocument.presentationml.presentation');
-                    header('Content-Disposition: attachment; filename="Projects_Report_' . date('Ymd') . '.pptx"');
-
-                    $writer = \PhpOffice\PhpPresentation\IOFactory::createWriter($out, 'PowerPoint2007');
-                    $writer->save('php://output');
+                    header('Content-Disposition: attachment; filename="IT_MANCOM_Report_' . date('Ymd') . '.pptx"');
+                    header('Content-Length: ' . filesize($tmpFile));
+                    readfile($tmpFile);
+                    unlink($tmpFile);
                     exit;
                 } catch (Throwable $e) {
+                    if (file_exists($tmpFile)) unlink($tmpFile);
                     http_response_code(500);
                     echo 'Export error: ' . $e->getMessage();
                     exit;

@@ -56,12 +56,8 @@ function exportProjectAsText(p) {
     lines.push('Description:');
     lines.push(p.description || 'No description provided.');
     lines.push('');
-    lines.push('Progress history:');
-    if (p.history && p.history.length) {
-      p.history.forEach((h) => lines.push(`${h.date} — ${h.progress}%`));
-    } else {
-      lines.push('No history recorded.');
-    }
+    lines.push('Previous update (notes):');
+    lines.push(p.notes || 'No previous update recorded.');
 
     const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -103,12 +99,8 @@ function exportAllProjectsAsText() {
       parts.push('Description:');
       parts.push(p.description || 'No description provided.');
       parts.push('');
-      parts.push('Progress history:');
-      if (p.history && p.history.length) {
-        p.history.forEach((h) => parts.push(`${h.date} — ${h.progress}%`));
-      } else {
-        parts.push('No history recorded.');
-      }
+      parts.push('Previous update (notes):');
+      parts.push(p.notes || 'No previous update recorded.');
       parts.push('');
     });
 
@@ -127,9 +119,21 @@ function exportAllProjectsAsText() {
   }
 }
 
-// Placeholder: Export all projects to PPT
+// Export all projects — generates the fixed 10-slide MANCOM report from the backend
 function exportAllProjectsAsPpt() {
-  showToast('PPT export not yet configured. Please provide the PPT template to integrate.', true);
+  if (!state.projects || state.projects.length === 0) { showToast('No projects to export.', true); return; }
+  try {
+    const url = `${API_URL}&export=1&format=pptx`;
+    const a = document.createElement('a');
+    a.href = url;
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    showToast('Exporting MANCOM report…');
+  } catch (e) {
+    showToast('Failed to export PPT: ' + (e.message || e), true);
+  }
 }
 
 function badgeHtml(status) {
