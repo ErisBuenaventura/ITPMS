@@ -460,10 +460,6 @@ if (isset($_GET['requests_api'])) {
       </div>
     </div>
 
-    <button class="btn btn-primary btn-new-project" id="btnNewProject">
-      <i data-lucide="plus"></i> New Project
-    </button>
-
     <nav class="side-nav">
       <button class="nav-item nav-item-active" data-view="dashboard"><i data-lucide="layout-dashboard"></i> Dashboard</button>
       <button class="nav-item" data-view="projects"><i data-lucide="folder-kanban"></i> Projects</button>
@@ -520,6 +516,9 @@ if (isset($_GET['requests_api'])) {
             <div class="panel-actions">
               <button class="btn btn-ghost" id="exportAllTextBtn" title="Export all projects as text"><i data-lucide="file-text"></i> Export all — Text</button>
               <button class="btn btn-ghost" id="exportAllPptBtn" title="Export all projects as PPT"><i data-lucide="file"></i> Export all — PPT</button>
+              <button class="btn btn-primary" id="btnNewProject">
+                <i data-lucide="plus"></i> New Project
+              </button>
             </div>
             <button class="chip-clear view-hidden" id="chipClear"></button>
             <span class="panel-sub" id="projectsCount"></span>
@@ -551,34 +550,42 @@ if (isset($_GET['requests_api'])) {
         <p class="view-sub">Small day-to-day IT requests — password resets, printer fixes, app installs. Not full projects, but still real work.</p>
       </div>
 
-      <div class="panel panel-spaced">
-        <div class="panel-head"><h2>Log a new request</h2></div>
-        <form class="form-grid request-form" id="requestForm">
-          <label class="field span-2"><span>What's the request?</span><input type="text" id="rTitle" placeholder="e.g. Reset password for J. Cruz" required></label>
-          <label class="field"><span>Requested by</span><input type="text" id="rRequester" placeholder="e.g. J. Cruz (HR)"></label>
-          <label class="field"><span>Category</span>
-            <select id="rCategory">
-              <option value="Hardware">Hardware</option>
-              <option value="Software">Software</option>
-              <option value="Account/Access">Account/Access</option>
-              <option value="Network">Network</option>
-              <option value="Other" selected>Other</option>
-            </select>
-          </label>
-          <label class="field"><span>Date &amp; time issued</span><input type="datetime-local" id="rIssued"></label>
-          <label class="field"><span>Status</span>
-            <select id="rStatus">
-              <option value="Open" selected>Open</option>
-              <option value="In Progress">In Progress</option>
-              <option value="Done">Done (already resolved)</option>
-            </select>
-          </label>
-          <label class="field view-hidden" id="rResolvedWrap"><span>Date &amp; time resolved</span><input type="datetime-local" id="rResolved"></label>
-          <label class="field span-2"><span>Notes (optional)</span><textarea id="rNotes" rows="2" placeholder="Anything worth remembering about this one?"></textarea></label>
-          <div class="form-actions span-2 form-actions-left">
-            <button type="submit" class="btn btn-primary"><i data-lucide="plus"></i> Log request</button>
+      <!-- New-request modal — opened from the "New Request" button in the All Requests
+           panel header below, so the table is what you see first. -->
+      <div class="modal-overlay view-hidden" id="requestNewOverlay">
+        <div class="modal-card modal-form">
+          <div class="modal-head">
+            <div class="modal-head-left"><h3>Log a new request</h3></div>
+            <div class="modal-head-right"><button class="icon-btn" id="requestNewClose"><i data-lucide="x"></i></button></div>
           </div>
-        </form>
+          <form class="form-grid request-form" id="requestForm">
+            <label class="field span-2"><span>What's the request?</span><input type="text" id="rTitle" placeholder="e.g. Reset password for J. Cruz" required></label>
+            <label class="field"><span>Requested by</span><input type="text" id="rRequester" placeholder="e.g. J. Cruz (HR)"></label>
+            <label class="field"><span>Category</span>
+              <select id="rCategory">
+                <option value="Hardware">Hardware</option>
+                <option value="Software">Software</option>
+                <option value="Account/Access">Account/Access</option>
+                <option value="Network">Network</option>
+                <option value="Other" selected>Other</option>
+              </select>
+            </label>
+            <label class="field"><span>Date &amp; time issued</span><input type="datetime-local" id="rIssued"></label>
+            <label class="field"><span>Status</span>
+              <select id="rStatus">
+                <option value="Open" selected>Open</option>
+                <option value="In Progress">In Progress</option>
+                <option value="Done">Done (already resolved)</option>
+              </select>
+            </label>
+            <label class="field view-hidden" id="rResolvedWrap"><span>Date &amp; time resolved</span><input type="datetime-local" id="rResolved"></label>
+            <label class="field span-2"><span>Notes (optional)</span><textarea id="rNotes" rows="2" placeholder="Anything worth remembering about this one?"></textarea></label>
+            <div class="form-actions span-2">
+              <button type="button" class="btn btn-ghost" id="requestNewCancel">Cancel</button>
+              <button type="submit" class="btn btn-primary"><i data-lucide="plus"></i> Log request</button>
+            </div>
+          </form>
+        </div>
       </div>
 
       <!-- Edit-request modal — reuses the same fields as the log form, pre-filled,
@@ -624,7 +631,10 @@ if (isset($_GET['requests_api'])) {
       <div class="panel">
         <div class="panel-head">
           <h2>All Requests</h2>
-          <span class="panel-sub" id="requestsCount"></span>
+          <div class="panel-head-right">
+            <button class="btn btn-primary" id="btnNewRequest"><i data-lucide="plus"></i> New Request</button>
+            <span class="panel-sub" id="requestsCount"></span>
+          </div>
         </div>
         <div class="table-scroll">
           <table class="proj-table">
@@ -754,5 +764,41 @@ if (isset($_GET['requests_api'])) {
 
 <script src="assets/js/dashboard.js"></script>
 <script src="assets/js/requests.js"></script>
+<script>
+  // Opens/closes the "Log a new request" modal. Kept as a small inline
+  // handler here (rather than in requests.js) so this file stays self-contained —
+  // the #requestForm element and its field IDs are unchanged, so requests.js's
+  // existing submit handler and status-toggle logic keep working exactly as before.
+  (function () {
+    var overlay = document.getElementById('requestNewOverlay');
+    var openBtn = document.getElementById('btnNewRequest');
+    var closeBtn = document.getElementById('requestNewClose');
+    var cancelBtn = document.getElementById('requestNewCancel');
+    var form = document.getElementById('requestForm');
+    if (!overlay || !openBtn) return;
+
+    function openModal() {
+      overlay.classList.remove('view-hidden');
+    }
+    function closeModal() {
+      overlay.classList.add('view-hidden');
+    }
+
+    openBtn.addEventListener('click', openModal);
+    if (closeBtn) closeBtn.addEventListener('click', closeModal);
+    if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+    overlay.addEventListener('click', function (e) {
+      if (e.target === overlay) closeModal();
+    });
+
+    // Best-effort auto-close after a submit is dispatched — requests.js owns the
+    // actual save/refresh logic via its own listener on this same form.
+    if (form) {
+      form.addEventListener('submit', function () {
+        setTimeout(closeModal, 150);
+      });
+    }
+  })();
+</script>
 </body>
 </html>

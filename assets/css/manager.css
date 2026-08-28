@@ -41,6 +41,14 @@ html, body { height: 100%; overflow: hidden; }
 .live-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--completed); margin-right: 5px; animation: pulse 1.6s infinite; }
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
 
+.print-btn { display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 12.5px; font-weight: 600; padding: 7px 13px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--ink); cursor: pointer; white-space: nowrap; }
+.print-btn:hover { background: #EDEFF3; }
+.print-btn svg { width: 14px; height: 14px; }
+
+.print-only { display: none; }
+.print-meta { font-size: 12px; color: var(--ink-soft); margin: -6px 0 12px; }
+.print-group-row td { background: #F5F6F8; font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 13px; color: var(--ink); padding: 10px 12px; border-bottom: 2px solid var(--border); }
+
 /* ---------- fit-outer/fit-inner: now a normal flex column that fills
    all remaining height below the top bar, instead of an absolutely
    positioned block sized to its own content. #fitInner no longer needs
@@ -371,4 +379,90 @@ table.mgr-table tbody tr:hover { background-color: #FAFBFC; }
      so the flex chain has something real to resolve against. */
   .chart-box, .chart-box.full-width { min-height: 220px; height: 220px; max-height: 220px; resize: none; }
   .mgr-col-right > .panel:has(.chart-grid) { min-height: 0; }
+}
+
+/* ---------- PRINT / "Save as PDF": turn the live, fit-to-screen
+   dashboard into a normal flowing, multi-page report. Nothing here
+   changes what's on screen — it only applies while printing. ---------- */
+@media print {
+  .no-print { display: none !important; }
+  .print-only { display: block !important; }
+
+  html, body { height: auto !important; overflow: visible !important; background: #fff; }
+  .page { height: auto !important; padding: 0; }
+  .fit-outer, .fit-inner { height: auto !important; overflow: visible !important; display: block !important; }
+  .fit-inner { display: flex !important; flex-direction: column !important; gap: 16px !important; }
+
+  .top-bar { margin-bottom: 10px; }
+  .live-dot { display: none; } /* a pulsing dot means nothing on a printed page */
+  .status-line { display: none; }
+
+  .stat-grid { flex-wrap: wrap; }
+  .stat-card { break-inside: avoid; }
+
+  /* charts already fit-to-panel on screen; give them a fixed, generous
+     print height instead of relying on flex/min-height:0 chains that
+     only resolve correctly inside a viewport-height layout */
+  .chart-box.full-width { height: 260px !important; min-height: 260px !important; max-height: none !important; }
+
+  /* the two-column layout becomes a single flowing column: read
+     top-to-bottom instead of side-by-side, which reads far better once
+     pagination is involved */
+  .mgr-columns { flex-direction: column !important; }
+  .mgr-col-left, .mgr-col-right { flex: 1 1 auto !important; display: block !important; width: 100%; }
+  .mgr-col-left > .panel, .mgr-col-right > .panel { flex: none !important; }
+
+  .panel { border-color: #ccc; box-shadow: none !important; break-inside: avoid; margin-bottom: 14px; }
+  .panel:hover { box-shadow: none; }
+
+  /* tables scroll on screen (.table-scroll) but must flow fully across
+     printed pages instead of clipping to a fixed panel height */
+  .table-scroll { overflow: visible !important; height: auto !important; max-height: none !important; }
+  table.mgr-table th { position: static !important; } /* sticky headers don't translate to print */
+  table.mgr-table thead { display: table-header-group; } /* repeat header on each printed page */
+  table.mgr-table tbody tr { break-inside: avoid; }
+  table.mgr-table td, table.mgr-table th { white-space: normal !important; overflow: visible !important; text-overflow: clip !important; }
+
+  /* Files/action columns are interactive-only (folder link, view-modal
+     trigger) and meaningless on paper */
+  table.mgr-table th:nth-child(7), table.mgr-table td:nth-child(7),
+  table.mgr-table th:nth-child(8), table.mgr-table td:nth-child(8) { display: none !important; }
+
+  .modal-overlay { display: none !important; }
+
+  /* Fit within a portrait page width. On screen these tables rely on
+     fixed-px column widths (e.g. the 190px progress bar) that don't
+     shrink — on a ~750px-wide printable portrait page those add up to
+     wider than the page, so columns silently overflow/clip on the
+     right. Force percentage-based widths + a much narrower progress
+     bar so nothing exceeds the page. */
+  @page { size: portrait; margin: 12mm; }
+
+  table.mgr-table { table-layout: fixed !important; width: 100% !important; font-size: 10.5px; }
+  table.mgr-table th, table.mgr-table td { padding: 6px 7px !important; font-size: 10.5px; }
+
+  table.mgr-table th:nth-child(1), table.mgr-table td:nth-child(1) { width: 5%  !important; }
+  table.mgr-table th:nth-child(2), table.mgr-table td:nth-child(2) { width: 32% !important; }
+  table.mgr-table th:nth-child(3), table.mgr-table td:nth-child(3) { width: 15% !important; }
+  table.mgr-table th:nth-child(4), table.mgr-table td:nth-child(4) { width: 12% !important; }
+  table.mgr-table th:nth-child(5), table.mgr-table td:nth-child(5) { width: 24% !important; }
+  table.mgr-table th:nth-child(6), table.mgr-table td:nth-child(6) { width: 12% !important; }
+
+  table.mgr-table.mgr-table-compact th:nth-child(1), table.mgr-table.mgr-table-compact td:nth-child(1) { width: 40% !important; }
+  table.mgr-table.mgr-table-compact th:nth-child(2), table.mgr-table.mgr-table-compact td:nth-child(2) { width: 15% !important; }
+  table.mgr-table.mgr-table-compact th:nth-child(3), table.mgr-table.mgr-table-compact td:nth-child(3) { width: 15% !important; }
+  table.mgr-table.mgr-table-compact th:nth-child(4), table.mgr-table.mgr-table-compact td:nth-child(4) { width: 15% !important; }
+  table.mgr-table.mgr-table-compact th:nth-child(5), table.mgr-table.mgr-table-compact td:nth-child(5) { width: 15% !important; }
+
+  .pbar-wrap { width: 100% !important; gap: 4px !important; }
+  .pbar-track { min-width: 30px; }
+  .pbar-value { width: 24px !important; font-size: 9.5px !important; }
+
+  .proj-name { font-size: 10.5px !important; -webkit-line-clamp: unset !important; line-clamp: unset !important; }
+  .proj-id { font-size: 8.5px !important; }
+  .badge { font-size: 9px !important; padding: 2px 6px !important; }
+  .req-requester { font-size: 9.5px !important; }
+
+  .stat-card { min-width: 0 !important; padding: 10px 12px !important; }
+  .stat-count { font-size: 20px !important; }
 }

@@ -31,6 +31,10 @@ function mgr_is_overdue(array $p): bool {
     return $p['end_date'] < date('Y-m-d');
 }
 
+function h($s): string {
+    return htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8');
+}
+
 /* Public, read-only API for this page's own refresh/view-modal calls — no
    login required, and no write verbs (POST/PUT/DELETE) exist here at all. */
 if (isset($_GET['api'])) {
@@ -125,7 +129,12 @@ try {
     <div class="top-bar-right">
       <span class="read-only-badge"><i data-lucide="lock"></i> Read only</span>
       <div class="status-line"><span class="live-dot"></span>Live · last updated <b id="lastUpdated">just now</b></div>
+      <button type="button" id="printReportBtn" class="print-btn no-print"><i data-lucide="printer"></i> Print / Save as PDF</button>
     </div>
+  </div>
+
+  <div class="print-only print-meta">
+    Generated <?= h(date('F j, Y \a\t g:i A')) ?> · Snapshot for reporting purposes
   </div>
 
   <div class="fit-outer" id="fitOuter">
@@ -135,7 +144,7 @@ try {
         <div class="mgr-col-left">
           <div class="panel">
             <div class="panel-head">All Projects (<span id="projCount"><?= count($projects) ?></span>)</div>
-            <div class="mgr-filter-bar" id="mgrFilterBar">
+            <div class="mgr-filter-bar no-print" id="mgrFilterBar">
               <input type="text" id="mgrSearchInput" class="mgr-filter-input" placeholder="Search project or owner…" autocomplete="off">
               <select id="mgrStatusFilter" class="mgr-filter-select"><option value="">All statuses</option></select>
               <select id="mgrPriorityFilter" class="mgr-filter-select"><option value="">All priorities</option></select>
@@ -331,6 +340,93 @@ try {
   observer.observe(tableBody, { childList: true });
 
   refresh();
+})();
+</script>
+
+<script>
+(function () {
+  // Prints the same #tableBody data as a grouped report (overdue first,
+  // then by status) without touching manager.js — this only reorders the
+  // already-rendered <tr> elements right before printing, then restores
+  // the original live order right after. Works regardless of how
+  // manager.js builds each row.
+  var tableBody = document.getElementById('tableBody');
+  var printBtn = document.getElementById('printReportBtn');
+  if (!tableBody) return;
+
+  var COL_STATUS = 6; // Status is the 6th column in the All Projects table
+  var GROUP_ORDER = ['__overdue__', 'Ongoing', 'On Hold', 'Not Started', 'Completed', 'Cancelled'];
+  var GROUP_LABELS = {
+    '__overdue__': 'Overdue / At Risk',
+    'Ongoing': 'Ongoing',
+    'On Hold': 'On Hold',
+    'Not Started': 'Not Started',
+    'Completed': 'Completed',
+    'Cancelled': 'Cancelled'
+  };
+
+  var savedOrder = null;
+  var insertedHeaders = [];
+
+  function isDataRow(row) {
+    return row.tagName === 'TR' && row.children.length >= COL_STATUS;
+  }
+  function statusText(row) {
+    var cell = row.children[COL_STATUS - 1];
+    return cell ? cell.textContent.trim() : '';
+  }
+  function isOverdue(row) {
+    // manager.css defines .overdue-dot for rows past their target end date.
+    return !!row.querySelector('.overdue-dot');
+  }
+
+  function groupForPrint() {
+    var rows = Array.prototype.filter.call(tableBody.children, isDataRow);
+    if (!rows.length) return;
+    savedOrder = rows.slice();
+
+    var buckets = {};
+    GROUP_ORDER.forEach(function (k) { buckets[k] = []; });
+    rows.forEach(function (row) {
+      var status = statusText(row);
+      var key = isOverdue(row) ? '__overdue__' : (GROUP_ORDER.indexOf(status) !== -1 ? status : 'Ongoing');
+      buckets[key].push(row);
+    });
+
+    var colCount = rows[0].children.length;
+    var frag = document.createDocumentFragment();
+    insertedHeaders = [];
+    GROUP_ORDER.forEach(function (key) {
+      var items = buckets[key];
+      if (!items.length) return;
+      var headerRow = document.createElement('tr');
+      headerRow.className = 'print-group-row';
+      var td = document.createElement('td');
+      td.colSpan = colCount;
+      td.textContent = GROUP_LABELS[key] + ' (' + items.length + ')';
+      headerRow.appendChild(td);
+      insertedHeaders.push(headerRow);
+      frag.appendChild(headerRow);
+      items.forEach(function (r) { frag.appendChild(r); });
+    });
+
+    tableBody.innerHTML = '';
+    tableBody.appendChild(frag);
+  }
+
+  function restoreOrder() {
+    if (!savedOrder) return;
+    var frag = document.createDocumentFragment();
+    savedOrder.forEach(function (r) { frag.appendChild(r); });
+    tableBody.innerHTML = '';
+    tableBody.appendChild(frag);
+    savedOrder = null;
+    insertedHeaders = [];
+  }
+
+  window.addEventListener('beforeprint', groupForPrint);
+  window.addEventListener('afterprint', restoreOrder);
+  if (printBtn) printBtn.addEventListener('click', function () { window.print(); });
 })();
 </script>
 <script src="assets/js/manager.js"></script>
