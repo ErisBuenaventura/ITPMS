@@ -101,6 +101,15 @@ try {
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
 <link rel="stylesheet" href="assets/css/manager.css">
+<style>
+  .mgr-filter-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--border,#e5e7eb);}
+  .mgr-filter-input,.mgr-filter-select{font:inherit;font-size:13px;padding:6px 10px;border-radius:8px;border:1px solid var(--border,#d1d5db);background:var(--panel-bg,#fff);color:inherit;}
+  .mgr-filter-input{flex:1 1 200px;min-width:140px;}
+  .mgr-filter-select{flex:0 0 auto;}
+  .mgr-filter-clear{flex:0 0 auto;font:inherit;font-size:13px;padding:6px 10px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--muted,#6b7280);cursor:pointer;}
+  .mgr-filter-clear:hover{text-decoration:underline;}
+  #tableBody tr.mgr-row-hidden{display:none !important;}
+</style>
 </head>
 <body>
 
@@ -126,6 +135,12 @@ try {
         <div class="mgr-col-left">
           <div class="panel">
             <div class="panel-head">All Projects (<span id="projCount"><?= count($projects) ?></span>)</div>
+            <div class="mgr-filter-bar" id="mgrFilterBar">
+              <input type="text" id="mgrSearchInput" class="mgr-filter-input" placeholder="Search project or owner…" autocomplete="off">
+              <select id="mgrStatusFilter" class="mgr-filter-select"><option value="">All statuses</option></select>
+              <select id="mgrPriorityFilter" class="mgr-filter-select"><option value="">All priorities</option></select>
+              <button type="button" id="mgrFilterClear" class="mgr-filter-clear">Clear</button>
+            </div>
             <div class="table-scroll">
               <table class="mgr-table">
                 <colgroup>
@@ -206,6 +221,117 @@ try {
 <script>
   window.INITIAL_PROJECTS = <?= json_encode($projects, JSON_HEX_TAG | JSON_HEX_APOS) ?>;
   window.INITIAL_MGR_REQUESTS = <?= json_encode($mgrRequests, JSON_HEX_TAG | JSON_HEX_APOS) ?>;
+</script>
+<script>
+(function () {
+  var tableBody   = document.getElementById('tableBody');
+  var searchInput = document.getElementById('mgrSearchInput');
+  var statusSel   = document.getElementById('mgrStatusFilter');
+  var prioritySel = document.getElementById('mgrPriorityFilter');
+  var clearBtn    = document.getElementById('mgrFilterClear');
+  var projCountEl = document.getElementById('projCount');
+  if (!tableBody) return;
+
+  // Column positions in the "All Projects" table (see <thead> above).
+  var COL_PROJECT  = 2;
+  var COL_PRIORITY = 4;
+  var COL_STATUS   = 6;
+
+  var totalRowCount = 0; // real project count, from #projCount's original value
+
+  function cellText(row, colIndex) {
+    var cell = row.children[colIndex - 1];
+    return cell ? cell.textContent.trim() : '';
+  }
+
+  function isDataRow(row) {
+    // Skip any "no projects yet" / empty-state row manager.js might render
+    // (heuristic: a real row has as many cells as the header).
+    return row.tagName === 'TR' && row.children.length >= COL_STATUS;
+  }
+
+  function syncOptions() {
+    var rows = Array.prototype.filter.call(tableBody.children, isDataRow);
+    if (totalRowCount === 0 || rows.length > 0) totalRowCount = rows.length;
+
+    var statuses = new Set();
+    var priorities = new Set();
+    rows.forEach(function (row) {
+      var s = cellText(row, COL_STATUS);
+      var p = cellText(row, COL_PRIORITY);
+      if (s) statuses.add(s);
+      if (p) priorities.add(p);
+    });
+
+    fillSelect(statusSel, statuses);
+    fillSelect(prioritySel, priorities);
+  }
+
+  function fillSelect(select, values) {
+    var current = select.value;
+    var sorted = Array.from(values).sort();
+    var placeholder = select.options[0];
+    select.innerHTML = '';
+    select.appendChild(placeholder);
+    sorted.forEach(function (v) {
+      var opt = document.createElement('option');
+      opt.value = v;
+      opt.textContent = v;
+      select.appendChild(opt);
+    });
+    if (sorted.indexOf(current) !== -1) select.value = current;
+  }
+
+  function applyFilter() {
+    var q = (searchInput.value || '').trim().toLowerCase();
+    var status = statusSel.value;
+    var priority = prioritySel.value;
+    var rows = Array.prototype.filter.call(tableBody.children, isDataRow);
+    var visible = 0;
+
+    rows.forEach(function (row) {
+      var project = cellText(row, COL_PROJECT).toLowerCase();
+      var owner = cellText(row, COL_PROJECT + 1).toLowerCase(); // Owner column
+      var rowStatus = cellText(row, COL_STATUS);
+      var rowPriority = cellText(row, COL_PRIORITY);
+
+      var matchesSearch = !q || project.indexOf(q) !== -1 || owner.indexOf(q) !== -1;
+      var matchesStatus = !status || rowStatus === status;
+      var matchesPriority = !priority || rowPriority === priority;
+      var show = matchesSearch && matchesStatus && matchesPriority;
+
+      row.classList.toggle('mgr-row-hidden', !show);
+      if (show) visible++;
+    });
+
+    if (projCountEl) {
+      var filtering = q || status || priority;
+      projCountEl.textContent = filtering ? (visible + ' / ' + totalRowCount) : String(totalRowCount);
+    }
+  }
+
+  function refresh() {
+    syncOptions();
+    applyFilter();
+  }
+
+  searchInput.addEventListener('input', applyFilter);
+  statusSel.addEventListener('change', applyFilter);
+  prioritySel.addEventListener('change', applyFilter);
+  clearBtn.addEventListener('click', function () {
+    searchInput.value = '';
+    statusSel.value = '';
+    prioritySel.value = '';
+    applyFilter();
+  });
+
+  // manager.js re-renders #tableBody on every live refresh; re-sync the
+  // filter options and re-apply the current filter whenever that happens.
+  var observer = new MutationObserver(refresh);
+  observer.observe(tableBody, { childList: true });
+
+  refresh();
+})();
 </script>
 <script src="assets/js/manager.js"></script>
 <script src="assets/js/mgr-requests.js"></script>

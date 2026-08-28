@@ -166,6 +166,24 @@ table.mgr-table.mgr-table-compact th:nth-child(4), table.mgr-table.mgr-table-com
 table.mgr-table.mgr-table-compact th:nth-child(5), table.mgr-table.mgr-table-compact td:nth-child(5) { width: 120px; }
 .proj-id { font-size: 10.5px; color: #8A8F98; font-weight: 500; margin-left: 6px; }
 
+/* ---------- Employee IT Concerns: the Request title reuses .proj-name
+   (2-line clamp + ellipsis, tuned for the dense Projects table) but a
+   support-request title has nowhere else to be read in full — there's
+   no detail modal for this panel like there is for projects. Give the
+   title its own unclamped rule, specific enough to win over the shared
+   .proj-name clamp above without touching the Projects table at all. ---------- */
+table.mgr-table.mgr-table-compact td:first-child .proj-name {
+  display: block;
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
+  -webkit-box-orient: unset;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: break-word;
+}
+
 @media (max-width: 920px) {
   table.mgr-table th, table.mgr-table td { padding: 7px 8px; font-size: 12px; }
   .proj-name { -webkit-line-clamp: 2; line-clamp: 2; }
