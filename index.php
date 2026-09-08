@@ -1,17 +1,4 @@
 <?php
-/**
- * ITPMS — IT Project Management System (single-file build, v3)
- * ------------------------------------------------------------------
- * HOW TO USE
- *   1. Create a MySQL database and import database.sql into it.
- *   2. Edit the 4 DB constants at the top of auth.php with your
- *      hosting credentials.
- *   3. Upload index.php, manager.php, auth.php, login.php, logout.php,
- *      and change_password.php together to your server.
- *   4. Log in with admin / admin123 (created automatically on first run),
- *      then use the "Change password" link in the sidebar to set your own.
- * ------------------------------------------------------------------
- */
 
 require_once __DIR__ . '/auth.php';
 require_login(); // gates both the page and every ?api=1 request below
@@ -765,10 +752,6 @@ if (isset($_GET['requests_api'])) {
 <script src="assets/js/dashboard.js"></script>
 <script src="assets/js/requests.js"></script>
 <script>
-  // Opens/closes the "Log a new request" modal. Kept as a small inline
-  // handler here (rather than in requests.js) so this file stays self-contained —
-  // the #requestForm element and its field IDs are unchanged, so requests.js's
-  // existing submit handler and status-toggle logic keep working exactly as before.
   (function () {
     var overlay = document.getElementById('requestNewOverlay');
     var openBtn = document.getElementById('btnNewRequest');
@@ -791,8 +774,6 @@ if (isset($_GET['requests_api'])) {
       if (e.target === overlay) closeModal();
     });
 
-    // Best-effort auto-close after a submit is dispatched — requests.js owns the
-    // actual save/refresh logic via its own listener on this same form.
     if (form) {
       form.addEventListener('submit', function () {
         setTimeout(closeModal, 150);

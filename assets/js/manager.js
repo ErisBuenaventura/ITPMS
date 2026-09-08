@@ -216,7 +216,6 @@ async function refresh() {
   } catch (e) { /* keep showing last known data if the request fails */ }
 }
 
-// Build a plain-text export that mirrors the report layout you provided.
 function formatDateLong(d) {
   return new Intl.DateTimeFormat('en-US', { year: 'numeric', month: 'long', day: '2-digit' }).format(d);
 }
@@ -326,13 +325,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
 window.addEventListener('resize', () => requestAnimationFrame(fitToScreen));
 
-// Print shouldn't inherit the "fit everything on one screen" sizing —
-// fitToScreen() can leave #fitInner with an inline width far wider than
-// the viewport (up to ~2.2x, at MIN_SCALE). manager.css already cancels
-// the transform for this element, but nothing cancels that inline width,
-// so at print time the browser sees a page that overflows horizontally
-// and auto-shrinks the whole thing to compensate — that's the "tiny/
-// compressed" print output. Clearing the width fixes it at the source.
 window.addEventListener('beforeprint', () => {
   const inner = document.getElementById('fitInner');
   if (inner) {

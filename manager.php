@@ -1,24 +1,4 @@
 <?php
-/**
- * ITPMS — Manager Overview (read-only dashboard)
- * ------------------------------------------------------------------
- * Drop this file next to index.php. It has its own small read-only
- * API (manager.php?api=1 for projects, manager.php?requests_api=1 for
- * the employee IT-requests feed) for the initial data and live
- * refreshes, so it works with no login at all.
- *
- * No create/edit/delete controls live here — view only. Layout adapts
- * to phone / tablet / laptop / desktop: a stacked card list on narrow
- * screens, a full table on wider ones. On larger screens the whole
- * dashboard scales to fit one screen with no scrolling; on small
- * phones with many projects it gracefully allows scrolling instead of
- * shrinking text past readability.
- *
- * Intentionally NOT gated by login — this is the view meant to be
- * shared with managers/stakeholders who don't need an account. It
- * still reuses auth.php for the DB connection, just without calling
- * require_login().
- */
 
 require_once __DIR__ . '/auth.php';
 
@@ -35,8 +15,6 @@ function h($s): string {
     return htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8');
 }
 
-/* Public, read-only API for this page's own refresh/view-modal calls — no
-   login required, and no write verbs (POST/PUT/DELETE) exist here at all. */
 if (isset($_GET['api'])) {
     header('Content-Type: application/json');
     $id = isset($_GET['id']) ? trim($_GET['id']) : null;
@@ -71,8 +49,6 @@ if (isset($_GET['api'])) {
     exit;
 }
 
-/* Read-only "employee concerns" (Quick IT Requests) feed for the right-hand
-   panel — same no-login, view-only rule as everything else on this page. */
 if (isset($_GET['requests_api'])) {
     header('Content-Type: application/json');
     try {
