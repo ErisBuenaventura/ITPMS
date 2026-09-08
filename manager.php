@@ -113,6 +113,112 @@ try {
   .mgr-filter-clear{flex:0 0 auto;font:inherit;font-size:13px;padding:6px 10px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--muted,#6b7280);cursor:pointer;}
   .mgr-filter-clear:hover{text-decoration:underline;}
   #tableBody tr.mgr-row-hidden{display:none !important;}
+
+  /* --- Owner removed from the "All Projects" table and the view modal ---
+     Hidden via CSS (rather than deleting the <th>/<col>/detail-row) so the
+     JS in assets/js/manager.js that renders each <tr> / sets #viewOwner
+     keeps working untouched — it just paints into elements we hide here. */
+  .mgr-col-left .mgr-table thead th:nth-child(3),
+  .mgr-col-left .mgr-table tbody td:nth-child(3) {
+    display: none;
+  }
+  #viewOwnerRow {
+    display: none;
+  }
+
+  /* --- Description in the view modal --- */
+  .view-details .detail-section-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .03em;
+    text-transform: uppercase;
+    color: var(--muted, #8A8F98);
+    margin: 14px 0 4px;
+  }
+  #viewDesc:empty::after {
+    content: "No description provided.";
+    color: var(--muted, #8A8F98);
+    font-style: italic;
+  }
+  #viewNotes:empty::after {
+    content: "No previous update recorded.";
+    color: var(--muted, #8A8F98);
+    font-style: italic;
+  }
+
+  /* --- Employee IT Concerns table ---
+     This panel sits inside #fitInner, which the page's own script scales
+     down to make everything fit one screen with no scroll. Bigger padding
+     just adds height, which makes that auto-scale shrink harder and looks
+     more compressed, not less. Going smaller/tighter instead — with
+     wrapping so nothing gets cut off — nets out more readable after the
+     scale is applied. */
+  .mgr-col-right .mgr-table-compact {
+    font-size: 11.5px;
+    table-layout: fixed;
+  }
+  .mgr-col-right .mgr-table-compact th,
+  .mgr-col-right .mgr-table-compact td {
+    padding: 5px 8px;
+    line-height: 1.3;
+    white-space: normal;
+    word-break: break-word;
+    vertical-align: top;
+  }
+  .mgr-col-right .mgr-table-compact thead th {
+    font-size: 10px;
+    letter-spacing: .02em;
+    text-transform: uppercase;
+    padding: 5px 8px;
+  }
+  .mgr-col-right .mgr-table-compact tbody tr + tr td {
+    border-top: 1px solid var(--border, #eef0f3);
+  }
+
+  /* --- Clickable stat cards + active-filter chip --- */
+  #statGrid > * {
+    cursor: pointer;
+    transition: transform .12s ease, box-shadow .12s ease;
+  }
+  #statGrid > *:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px rgba(16,24,40,.08);
+  }
+  #statGrid > *.mgr-stat-active {
+    outline: 2px solid var(--accent, #3b82f6);
+    outline-offset: -2px;
+  }
+  .mgr-chip-clear {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 8px;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 3px 10px 3px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--accent, #3b82f6);
+    background: var(--accent-soft, #eaf2ff);
+    color: var(--accent, #3b82f6);
+    cursor: pointer;
+  }
+  .mgr-chip-clear::after {
+    content: "✕";
+    font-size: 11px;
+  }
+  .mgr-chip-clear:hover {
+    filter: brightness(0.96);
+  }
+
+  /* --- Rebalance the two-column layout ---
+     manager.css sets .mgr-columns' grid-template-columns; this narrows the
+     "All Projects" side and widens the chart / Employee IT Concerns side.
+     Only the ratio changes here — layout mode (grid vs. stacked on mobile)
+     is still whatever manager.css decides. */
+  .mgr-columns {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
 </style>
 </head>
 <body>
@@ -143,7 +249,10 @@ try {
       <div class="mgr-columns">
         <div class="mgr-col-left">
           <div class="panel">
-            <div class="panel-head">All Projects (<span id="projCount"><?= count($projects) ?></span>)</div>
+            <div class="panel-head">
+              All Projects (<span id="projCount"><?= count($projects) ?></span>)
+              <button type="button" class="mgr-chip-clear view-hidden no-print" id="mgrCardFilterChip"></button>
+            </div>
             <div class="mgr-filter-bar no-print" id="mgrFilterBar">
               <input type="text" id="mgrSearchInput" class="mgr-filter-input" placeholder="Search project or owner…" autocomplete="off">
               <select id="mgrStatusFilter" class="mgr-filter-select"><option value="">All statuses</option></select>
@@ -153,16 +262,15 @@ try {
             <div class="table-scroll">
               <table class="mgr-table">
                 <colgroup>
-                  <col style="width:48px">
+                  <col style="width:44px">
                   <col style="width:auto">
                   <col style="width:110px">
-                  <col style="width:90px">
-                  <col style="width:220px">
-                  <col style="width:120px">
-                  <col style="width:56px">
-                  <col style="width:56px">
+                  <col style="width:80px">
+                  <col style="width:20px">
+                  <col style="width:20x">
+                  <col style="width:52px">
                 </colgroup>
-                <thead><tr><th>#</th><th>Project</th><th>Owner</th><th>Priority</th><th>Progress</th><th>Status</th><th>Files</th><th></th></tr></thead>
+                <thead><tr><th>#</th><th>Project</th><th>Owner</th><th>Priority</th><th>Progress</th><th>Status</th><th>Files</th></tr></thead>
                 <tbody id="tableBody"></tbody>
               </table>
             </div>
@@ -184,10 +292,10 @@ try {
               <table class="mgr-table mgr-table-compact">
                 <colgroup>
                   <col style="width:auto">
-                  <col style="width:120px">
-                  <col style="width:120px">
-                  <col style="width:120px">
-                  <col style="width:120px">
+                  <col style="width:90px">
+                  <col style="width:80px">
+                  <col style="width:96px">
+                  <col style="width:96px">
                 </colgroup>
                 <thead><tr><th>Request</th><th>Category</th><th>Status</th><th>Issued</th><th>Resolved</th></tr></thead>
                 <tbody id="mgrRequestsTableBody"></tbody>
@@ -210,13 +318,16 @@ try {
       <div class="view-details">
         <div id="viewModalProgress"></div>
         <div class="detail-rows">
-          <div class="detail-row"><span>Owner</span><b id="viewOwner"></b></div>
+          <div class="detail-row" id="viewOwnerRow"><span>Owner</span><b id="viewOwner"></b></div>
           <div class="detail-row"><span>Priority</span><b id="viewPriority"></b></div>
           <div class="detail-row"><span>Start date</span><b id="viewStart"></b></div>
           <div class="detail-row"><span>Target end</span><b id="viewEnd"></b></div>
           <div class="detail-row"><span>Budget</span><b id="viewBudget"></b></div>
         </div>
+        <div class="detail-section-label">Description</div>
         <p class="detail-desc" id="viewDesc"></p>
+        <div class="detail-section-label">Previous update (notes)</div>
+        <p class="detail-desc" id="viewNotes"></p>
         <div id="viewFileLinkWrap"></div>
       </div>
       <div class="view-chart">
@@ -239,14 +350,26 @@ try {
   var prioritySel = document.getElementById('mgrPriorityFilter');
   var clearBtn    = document.getElementById('mgrFilterClear');
   var projCountEl = document.getElementById('projCount');
+  var statGrid    = document.getElementById('statGrid');
+  var cardChip    = document.getElementById('mgrCardFilterChip');
   if (!tableBody) return;
 
   // Column positions in the "All Projects" table (see <thead> above).
+  // Owner (col 3) is still rendered into the DOM by manager.js and is still
+  // searchable below — it's just hidden visually via CSS, so these indices
+  // are unchanged.
   var COL_PROJECT  = 2;
   var COL_PRIORITY = 4;
   var COL_STATUS   = 6;
 
   var totalRowCount = 0; // real project count, from #projCount's original value
+  var overdueOnly   = false; // set when the "Overdue" stat card is active
+  var cardStatus    = null; // status forced by a clicked stat card — tracked
+                           // separately from the <select>'s value, since a
+                           // status with zero matching rows (e.g. clicking
+                           // "Cancelled" when count is 0) never gets an
+                           // <option> in the dropdown, so select.value can't
+                           // hold it.
 
   function cellText(row, colIndex) {
     var cell = row.children[colIndex - 1];
@@ -291,31 +414,46 @@ try {
     if (sorted.indexOf(current) !== -1) select.value = current;
   }
 
+  function isOverdueRow(row) {
+    // manager.css defines .overdue-dot for rows past their target end date.
+    return !!row.querySelector('.overdue-dot');
+  }
+
   function applyFilter() {
     var q = (searchInput.value || '').trim().toLowerCase();
-    var status = statusSel.value;
+    var status = cardStatus !== null ? cardStatus : statusSel.value;
     var priority = prioritySel.value;
     var rows = Array.prototype.filter.call(tableBody.children, isDataRow);
     var visible = 0;
 
     rows.forEach(function (row) {
       var project = cellText(row, COL_PROJECT).toLowerCase();
-      var owner = cellText(row, COL_PROJECT + 1).toLowerCase(); // Owner column
+      var owner = cellText(row, COL_PROJECT + 1).toLowerCase(); // Owner column (hidden, still searchable)
       var rowStatus = cellText(row, COL_STATUS);
       var rowPriority = cellText(row, COL_PRIORITY);
 
       var matchesSearch = !q || project.indexOf(q) !== -1 || owner.indexOf(q) !== -1;
       var matchesStatus = !status || rowStatus === status;
       var matchesPriority = !priority || rowPriority === priority;
-      var show = matchesSearch && matchesStatus && matchesPriority;
+      var matchesOverdue = !overdueOnly || isOverdueRow(row);
+      var show = matchesSearch && matchesStatus && matchesPriority && matchesOverdue;
 
       row.classList.toggle('mgr-row-hidden', !show);
       if (show) visible++;
     });
 
     if (projCountEl) {
-      var filtering = q || status || priority;
+      var filtering = q || status || priority || overdueOnly;
       projCountEl.textContent = filtering ? (visible + ' / ' + totalRowCount) : String(totalRowCount);
+    }
+
+    if (cardChip) {
+      if (activeCardLabel) {
+        cardChip.textContent = activeCardLabel;
+        cardChip.classList.remove('view-hidden');
+      } else {
+        cardChip.classList.add('view-hidden');
+      }
     }
   }
 
@@ -324,15 +462,94 @@ try {
     applyFilter();
   }
 
+  function setCardHighlight(cardEl) {
+    if (!statGrid) return;
+    Array.prototype.forEach.call(statGrid.children, function (c) {
+      c.classList.remove('mgr-stat-active');
+    });
+    if (cardEl) cardEl.classList.add('mgr-stat-active');
+  }
+
+  function clearCardFilter() {
+    overdueOnly = false;
+    activeCardLabel = null;
+    cardStatus = null;   // add this line
+    setCardHighlight(null);
+  }
+
   searchInput.addEventListener('input', applyFilter);
-  statusSel.addEventListener('change', applyFilter);
+  statusSel.addEventListener('change', function () { clearCardFilter(); applyFilter(); });
   prioritySel.addEventListener('change', applyFilter);
   clearBtn.addEventListener('click', function () {
     searchInput.value = '';
     statusSel.value = '';
     prioritySel.value = '';
+    clearCardFilter();
     applyFilter();
   });
+  if (cardChip) {
+    cardChip.addEventListener('click', function () {
+      statusSel.value = '';
+      clearCardFilter();
+      applyFilter();
+    });
+  }
+
+  // --- Clickable stat cards ---------------------------------------------
+  // #statGrid's cards are rendered by manager.js, whose markup we don't
+  // control from here, so this reads each card's own text (stripping any
+  // numbers/currency so "Completed 12" or "₱12,000" -> "Completed") and
+  // matches it against known status/overdue wording. If your card labels
+  // use different wording than this, the matching below is the only place
+  // that needs adjusting.
+  function normalizeCardLabel(rawText) {
+    return (rawText || '').replace(/[\d,.$₱%]+/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+
+  if (statGrid) {
+    statGrid.addEventListener('click', function (e) {
+      var card = e.target.closest('#statGrid > *');
+      if (!card) return;
+
+      var lower = normalizeCardLabel(card.textContent).toLowerCase();
+
+      if (/overdue|at risk/.test(lower)) {
+        statusSel.value = '';
+        overdueOnly = true;
+        activeCardLabel = 'Overdue';
+        setCardHighlight(card);
+        applyFilter();
+        return;
+      }
+      if (/total|all projects/.test(lower)) {
+        statusSel.value = '';
+        clearCardFilter();
+        applyFilter();
+        return;
+      }
+
+      var matchedStatus = null;
+      if (/on\s*hold/.test(lower)) matchedStatus = 'On Hold';
+      else if (/not started/.test(lower)) matchedStatus = 'Not Started';
+      else if (/cancell?ed/.test(lower)) matchedStatus = 'Cancelled';
+      else if (/completed/.test(lower)) matchedStatus = 'Completed';
+      else if (/ongoing|in progress/.test(lower)) matchedStatus = 'Ongoing';
+      if (!matchedStatus) return; // unrecognized card — leave current filters alone
+
+      // Match case-insensitively against whatever's actually in the
+      // dropdown (it's only populated with statuses present in the data).
+      var matchedOption = Array.prototype.find.call(statusSel.options, function (o) {
+        return o.value && o.value.toLowerCase() === matchedStatus.toLowerCase();
+      });
+
+      overdueOnly = false;
+      cardStatus = matchedStatus;
+      statusSel.value = matchedOption ? matchedOption.value : ''; // best-effort visual sync only
+      activeCardLabel = matchedStatus;
+      setCardHighlight(card);
+      applyFilter();
+    });
+  }
 
   // manager.js re-renders #tableBody on every live refresh; re-sync the
   // filter options and re-apply the current filter whenever that happens.
@@ -427,6 +644,40 @@ try {
   window.addEventListener('beforeprint', groupForPrint);
   window.addEventListener('afterprint', restoreOrder);
   if (printBtn) printBtn.addEventListener('click', function () { window.print(); });
+})();
+</script>
+
+<script>
+(function () {
+  // Fills in the "Previous update (notes)" field added to the view modal.
+  // manager.js doesn't know about #viewNotes, so rather than touch that
+  // file, this pulls the value straight from this page's own read-only
+  // ?api=1&id=... endpoint whenever the modal is opened (detected by
+  // watching #viewModalOverlay lose its "view-hidden" class).
+  var overlay = document.getElementById('viewModalOverlay');
+  var idEl    = document.getElementById('viewModalId');
+  var notesEl = document.getElementById('viewNotes');
+  if (!overlay || !idEl || !notesEl) return;
+
+  function currentProjectId() {
+    return (idEl.textContent || '').trim().replace(/^#/, '');
+  }
+
+  function loadNotes() {
+    var id = currentProjectId();
+    if (!id) { notesEl.textContent = ''; return; }
+    fetch('manager.php?api=1&id=' + encodeURIComponent(id))
+      .then(function (r) { return r.json(); })
+      .then(function (project) {
+        notesEl.textContent = (project && project.notes) ? project.notes : '';
+      })
+      .catch(function () { notesEl.textContent = ''; });
+  }
+
+  var modalObserver = new MutationObserver(function () {
+    if (!overlay.classList.contains('view-hidden')) loadNotes();
+  });
+  modalObserver.observe(overlay, { attributes: true, attributeFilter: ['class'] });
 })();
 </script>
 <script src="assets/js/manager.js"></script>

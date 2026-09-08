@@ -323,3 +323,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
   setInterval(refresh, 30000); // background refresh every 30s — fully live, no page reload
 });
+
+window.addEventListener('resize', () => requestAnimationFrame(fitToScreen));
+
+// Print shouldn't inherit the "fit everything on one screen" sizing —
+// fitToScreen() can leave #fitInner with an inline width far wider than
+// the viewport (up to ~2.2x, at MIN_SCALE). manager.css already cancels
+// the transform for this element, but nothing cancels that inline width,
+// so at print time the browser sees a page that overflows horizontally
+// and auto-shrinks the whole thing to compensate — that's the "tiny/
+// compressed" print output. Clearing the width fixes it at the source.
+window.addEventListener('beforeprint', () => {
+  const inner = document.getElementById('fitInner');
+  if (inner) {
+    inner.style.transform = 'none';
+    inner.style.width = '';
+  }
+});
+
+window.addEventListener('afterprint', () => {
+  requestAnimationFrame(fitToScreen); // restore the on-screen fit
+});
+

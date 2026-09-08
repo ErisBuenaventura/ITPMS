@@ -442,11 +442,23 @@ table.mgr-table tbody tr:hover { background-color: #FAFBFC; }
   table.mgr-table th, table.mgr-table td { padding: 6px 7px !important; font-size: 10.5px; }
 
   table.mgr-table th:nth-child(1), table.mgr-table td:nth-child(1) { width: 5%  !important; }
-  table.mgr-table th:nth-child(2), table.mgr-table td:nth-child(2) { width: 32% !important; }
-  table.mgr-table th:nth-child(3), table.mgr-table td:nth-child(3) { width: 15% !important; }
+  table.mgr-table th:nth-child(2), table.mgr-table td:nth-child(2) { width: 47% !important; }
   table.mgr-table th:nth-child(4), table.mgr-table td:nth-child(4) { width: 12% !important; }
   table.mgr-table th:nth-child(5), table.mgr-table td:nth-child(5) { width: 24% !important; }
   table.mgr-table th:nth-child(6), table.mgr-table td:nth-child(6) { width: 12% !important; }
+
+  /* Owner (col 3) is hidden via the .mgr-col-left rule elsewhere in this
+     file, but table-layout:fixed still reserves its <colgroup> width
+     unless we zero it out explicitly here too — that reserved-but-empty
+     space was the gap shifting Priority/Progress/Status out of line. */
+  .mgr-col-left .mgr-table th:nth-child(3),
+  .mgr-col-left .mgr-table td:nth-child(3) {
+    width: 0 !important;
+    max-width: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    overflow: hidden !important;
+  }
 
   table.mgr-table.mgr-table-compact th:nth-child(1), table.mgr-table.mgr-table-compact td:nth-child(1) { width: 40% !important; }
   table.mgr-table.mgr-table-compact th:nth-child(2), table.mgr-table.mgr-table-compact td:nth-child(2) { width: 15% !important; }

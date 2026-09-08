@@ -547,7 +547,7 @@ if (isset($_GET['requests_api'])) {
     <section class="view view-hidden" id="view-requests">
       <div class="view-header">
         <h1>Quick Requests</h1>
-        <p class="view-sub">Small day-to-day IT requests — password resets, printer fixes, app installs. Not full projects, but still real work.</p>
+        <p class="view-sub">Small day-to-day IT requests — password resets, printer fixes, app installs.</p>
       </div>
 
       <!-- New-request modal — opened from the "New Request" button in the All Requests
