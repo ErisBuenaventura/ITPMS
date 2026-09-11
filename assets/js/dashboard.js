@@ -47,7 +47,6 @@ function exportProjectAsText(p) {
     lines.push(`Project: ${p.name} (${p.id})`);
     lines.push(`Status: ${p.status}`);
     lines.push(`Progress: ${p.progress}%`);
-    lines.push(`Owner: ${p.owner || '—'}`);
     lines.push(`Priority: ${p.priority}`);
     lines.push(`Start date: ${p.start_date || '—'}`);
     lines.push(`Target end: ${p.end_date || '—'}`);
@@ -90,7 +89,6 @@ function exportAllProjectsAsText() {
       parts.push(`Project: ${p.name} (${p.id})`);
       parts.push(`Status: ${p.status}`);
       parts.push(`Progress: ${p.progress}%`);
-      parts.push(`Owner: ${p.owner || '—'}`);
       parts.push(`Priority: ${p.priority}`);
       parts.push(`Start date: ${p.start_date || '—'}`);
       parts.push(`Target end: ${p.end_date || '—'}`);
@@ -397,9 +395,9 @@ function renderProjectsTable() {
   if (state.filterStatus === OVERDUE) rows = rows.filter(isOverdue);
   else if (state.filterStatus) rows = rows.filter((p) => p.status === state.filterStatus);
 
-  // 2. filter by search text (name or owner)
+  // 2. filter by search text (name)
   const q = state.search.trim().toLowerCase();
-  if (q) rows = rows.filter((p) => p.name.toLowerCase().includes(q) || (p.owner || '').toLowerCase().includes(q));
+  if (q) rows = rows.filter((p) => p.name.toLowerCase().includes(q));
 
   // 3. sort
   if (state.sortKey) {
@@ -453,10 +451,6 @@ function renderProjectsTable() {
         ${progressBarHtml(p.progress, p.status, true)}
       </td>
 
-      <td data-label="Owner">
-        ${escapeHtml(p.owner || '—')}
-      </td>
-
       <td data-label="Priority">
         ${escapeHtml(p.priority || '—')}
       </td>
@@ -488,7 +482,7 @@ function renderProjectsTable() {
       </td>
     </tr>
   `).join('') || `<tr>
-    <td colspan="9" class="empty-row">
+    <td colspan="8" class="empty-row">
       <i data-lucide="search-x" class="empty-icon"></i>
       No projects match your filters.
     </td>
@@ -541,7 +535,6 @@ async function openViewModal(id) {
   document.getElementById('viewModalName').textContent = p.name;
   document.getElementById('viewModalBadge').innerHTML = badgeHtml(p.status);
   document.getElementById('viewModalProgress').innerHTML = progressBarHtml(p.progress, p.status, false);
-  document.getElementById('viewOwner').textContent = p.owner || '—';
   document.getElementById('viewPriority').textContent = p.priority;
   document.getElementById('viewStart').textContent = p.start_date || '—';
   document.getElementById('viewEnd').textContent = p.end_date || '—';
@@ -621,7 +614,6 @@ async function openEditModal(id) {
   document.getElementById('fPriority').value = p.priority;
   document.getElementById('fProgress').value = p.progress;
   document.getElementById('fProgressLabel').textContent = p.progress;
-  document.getElementById('fOwner').value = p.owner || '';
   document.getElementById('fStart').value = p.start_date || '';
   document.getElementById('fEnd').value = p.end_date || '';
   document.getElementById('fBudget').value = p.budget;
@@ -699,7 +691,6 @@ async function submitForm(e) {
     status: document.getElementById('fStatus').value,
     priority: document.getElementById('fPriority').value,
     progress: Number(document.getElementById('fProgress').value),
-    owner: document.getElementById('fOwner').value.trim(),
     start: document.getElementById('fStart').value || null,
     end: document.getElementById('fEnd').value || null,
     budget: Number(document.getElementById('fBudget').value) || 0,

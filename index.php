@@ -39,7 +39,7 @@ if (isset($_GET['export'])) {
     try {
         switch ($report) {
             case 'projects':
-                $stmt = $pdo->query("SELECT id,name,status,progress,owner,priority,start_date,end_date,budget,description,file_link,created_at,updated_at FROM projects ORDER BY created_at ASC");
+                $stmt = $pdo->query("SELECT id,name,status,progress,priority,start_date,end_date,budget,description,file_link,created_at,updated_at FROM projects ORDER BY created_at ASC");
                 $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 break;
             case 'history':
@@ -47,7 +47,7 @@ if (isset($_GET['export'])) {
                 $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 break;
             case 'projects_history':
-                            $stmt = $pdo->query("SELECT p.id AS project_id,p.name AS project_name,p.status,p.progress AS current_progress,p.owner,p.priority,p.start_date,p.end_date,p.budget,p.description,p.file_link, ph.entry_date AS history_date, ph.progress AS history_progress, ph.notes AS history_notes FROM projects p LEFT JOIN progress_history ph ON p.id=ph.project_id ORDER BY p.id, ph.entry_date ASC");
+                            $stmt = $pdo->query("SELECT p.id AS project_id,p.name AS project_name,p.status,p.progress AS current_progress,p.priority,p.start_date,p.end_date,p.budget,p.description,p.file_link, ph.entry_date AS history_date, ph.progress AS history_progress, ph.notes AS history_notes FROM projects p LEFT JOIN progress_history ph ON p.id=ph.project_id ORDER BY p.id, ph.entry_date ASC");
                 $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 break;
             case 'summary':
@@ -159,7 +159,6 @@ if (isset($_GET['api'])) {
             $status   = in_array($data['status'] ?? '', $VALID_STATUSES) ? $data['status'] : 'Not Started';
             $priority = in_array($data['priority'] ?? '', $VALID_PRIORITIES) ? $data['priority'] : 'Medium';
             $progress = max(0, min(100, (int) ($data['progress'] ?? 0)));
-            $owner    = trim($data['owner'] ?? '');
             $start    = !empty($data['start']) ? $data['start'] : null;
             $end      = !empty($data['end']) ? $data['end'] : null;
             $budget   = (float) ($data['budget'] ?? 0);
@@ -168,9 +167,9 @@ if (isset($_GET['api'])) {
             $newId    = next_project_id($pdo);
 
             $notes = trim($data['notes'] ?? '');
-            $stmt = $pdo->prepare("INSERT INTO projects (id, name, status, progress, owner, priority, start_date, end_date, budget, description, file_link, notes)
-                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-            $stmt->execute([$newId, $name, $status, $progress, $owner, $priority, $start, $end, $budget, $desc, $fileLink ?: null, $notes ?: null]);
+            $stmt = $pdo->prepare("INSERT INTO projects (id, name, status, progress, priority, start_date, end_date, budget, description, file_link, notes)
+                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->execute([$newId, $name, $status, $progress, $priority, $start, $end, $budget, $desc, $fileLink ?: null, $notes ?: null]);
 
             // If client supplied an explicit history array, upsert each entry. Otherwise insert today's point as before.
             if (array_key_exists('history', $data) && is_array($data['history'])) {
@@ -217,7 +216,6 @@ if (isset($_GET['api'])) {
             $status   = in_array($data['status'] ?? '', $VALID_STATUSES) ? $data['status'] : $existing['status'];
             $priority = in_array($data['priority'] ?? '', $VALID_PRIORITIES) ? $data['priority'] : $existing['priority'];
             $progress = isset($data['progress']) ? max(0, min(100, (int) $data['progress'])) : (int) $existing['progress'];
-            $owner    = trim($data['owner'] ?? $existing['owner']);
             $start    = array_key_exists('start', $data) ? (!empty($data['start']) ? $data['start'] : null) : $existing['start_date'];
             $end      = array_key_exists('end', $data) ? (!empty($data['end']) ? $data['end'] : null) : $existing['end_date'];
             $budget   = isset($data['budget']) ? (float) $data['budget'] : (float) $existing['budget'];
@@ -225,8 +223,8 @@ if (isset($_GET['api'])) {
             $fileLink = array_key_exists('file_link', $data) ? trim($data['file_link']) : $existing['file_link'];
 
             $notes = array_key_exists('notes', $data) ? trim($data['notes']) : $existing['notes'];
-            $stmt = $pdo->prepare("UPDATE projects SET name=?, status=?, progress=?, owner=?, priority=?, start_date=?, end_date=?, budget=?, description=?, file_link=?, notes=? WHERE id=?");
-            $stmt->execute([$name, $status, $progress, $owner, $priority, $start, $end, $budget, $desc, $fileLink ?: null, $notes ?: null, $id]);
+            $stmt = $pdo->prepare("UPDATE projects SET name=?, status=?, progress=?, priority=?, start_date=?, end_date=?, budget=?, description=?, file_link=?, notes=? WHERE id=?");
+            $stmt->execute([$name, $status, $progress, $priority, $start, $end, $budget, $desc, $fileLink ?: null, $notes ?: null, $id]);
 
             $h = $pdo->prepare("INSERT INTO progress_history (project_id, entry_date, progress, notes) VALUES (?, ?, ?, NULL)
                                  ON DUPLICATE KEY UPDATE progress = VALUES(progress), notes = COALESCE(notes, VALUES(notes))");
@@ -498,7 +496,7 @@ if (isset($_GET['requests_api'])) {
           <div class="panel-head-right">
             <div class="search-box">
               <i data-lucide="search"></i>
-              <input type="text" id="projectSearch" placeholder="Search name or owner…">
+              <input type="text" id="projectSearch" placeholder="Search project name…">
             </div>
             <div class="panel-actions">
               <button class="btn btn-ghost" id="exportAllTextBtn" title="Export all projects as text"><i data-lucide="file-text"></i> Export all — Text</button>
@@ -518,7 +516,6 @@ if (isset($_GET['requests_api'])) {
               <th class="th-sort" data-sort="name">Project<i data-lucide="chevrons-up-down" class="sort-icon"></i></th>
               <th class="col-status th-sort" data-sort="status">Status<i data-lucide="chevrons-up-down" class="sort-icon"></i></th>
               <th class="col-progress th-sort" data-sort="progress">Progress<i data-lucide="chevrons-up-down" class="sort-icon"></i></th>
-              <th class="col-owner th-sort" data-sort="owner">Owner<i data-lucide="chevrons-up-down" class="sort-icon"></i></th>
               <th class="col-priority th-sort" data-sort="priority">Priority<i data-lucide="chevrons-up-down" class="sort-icon"></i></th>
               <th class="col-start_date th-sort" data-sort="start_date">Start Date<i data-lucide="chevrons-up-down" class="sort-icon"></i></th>
               <th class="col-end_date th-sort" data-sort="end_date">End Date<i data-lucide="chevrons-up-down" class="sort-icon"></i></th>
@@ -655,7 +652,6 @@ if (isset($_GET['requests_api'])) {
       <div class="view-details">
         <div id="viewModalProgress"></div>
         <div class="detail-rows">
-          <div class="detail-row"><span>Owner</span><b id="viewOwner"></b></div>
           <div class="detail-row"><span>Priority</span><b id="viewPriority"></b></div>
           <div class="detail-row"><span>Start date</span><b id="viewStart"></b></div>
           <div class="detail-row"><span>Target end</span><b id="viewEnd"></b></div>
@@ -703,7 +699,6 @@ if (isset($_GET['requests_api'])) {
         </select>
       </label>
       <label class="field"><span>Progress (<span id="fProgressLabel">0</span>%)</span><input type="range" id="fProgress" min="0" max="100" value="0"></label>
-      <label class="field"><span>Owner</span><input type="text" id="fOwner" placeholder="e.g. J. Santos"></label>
       <label class="field"><span>Start date</span><input type="date" id="fStart"></label>
       <label class="field"><span>Target end date</span><input type="date" id="fEnd"></label>
       <label class="field span-2"><span>Budget (₱)</span><input type="number" id="fBudget" min="0" step="0.01" value="0"></label>
