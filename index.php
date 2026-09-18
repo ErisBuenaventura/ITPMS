@@ -3,6 +3,14 @@
 require_once __DIR__ . '/auth.php';
 require_login(); // gates both the page and every ?api=1 request below
 
+// Load Composer's autoloader if it exists, so optional libraries (e.g. smalot/pdfparser
+// for PDF text extraction, installed via `composer require smalot/pdfparser`) are
+// available. Safe to skip if vendor/ hasn't been set up — features that need those
+// libraries just fall back to manual entry.
+if (file_exists(__DIR__ . '/vendor/autoload.php')) {
+    require_once __DIR__ . '/vendor/autoload.php';
+}
+
 // Ensure required notes columns exist (safe, idempotent).
 try {
     // Project notes
@@ -22,6 +30,194 @@ try {
 } catch (Throwable $e) {
     // Ignore migration errors.
     // The database schema can also be updated manually through database.sql.
+}
+
+// Columns needed for the "upload IT Request Form" feature (safe, idempotent).
+try {
+    $newCols = [
+        'request_details' => "ALTER TABLE it_requests ADD COLUMN request_details TEXT NULL",
+        'remarks'         => "ALTER TABLE it_requests ADD COLUMN remarks TEXT NULL",
+        'priority'        => "ALTER TABLE it_requests ADD COLUMN priority VARCHAR(20) NULL",
+        'source_file'     => "ALTER TABLE it_requests ADD COLUMN source_file VARCHAR(255) NULL",
+    ];
+    foreach ($newCols as $colName => $ddl) {
+        $col = $pdo->query("SHOW COLUMNS FROM it_requests LIKE '" . $colName . "'")->fetch();
+        if (!$col) $pdo->exec($ddl);
+    }
+} catch (Throwable $e) {
+    // Ignore migration errors.
+}
+
+/**
+ * Best-effort helpers for the "upload IT Request Form" feature.
+ * These extract plain text from an uploaded DOCX/PDF and then run simple
+ * label-based regex matching over it. Checkbox fields (Type of IT Request,
+ * Priority) CANNOT be reliably read this way — text extraction returns every
+ * printed checkbox label regardless of which one was actually ticked, since
+ * the tick mark itself is a visual, not textual, detail. So category/priority
+ * here are only a rough guess and the extracted result must always go through
+ * a human "Review & Confirm" step before saving, same as the proposal calls for.
+ */
+function extract_text_from_docx(string $path): string {
+    if (!class_exists('ZipArchive')) return '';
+    $zip = new ZipArchive();
+    if ($zip->open($path) !== true) return '';
+    $xml = $zip->getFromName('word/document.xml');
+    $zip->close();
+    if ($xml === false) return '';
+    $xml = preg_replace('/<w:p\b[^>]*>/', "\n", $xml);
+    $xml = preg_replace('/<w:tab\/>/', "\t", $xml);
+    $text = strip_tags($xml);
+    $text = html_entity_decode($text, ENT_QUOTES | ENT_XML1, 'UTF-8');
+    return trim(preg_replace("/\n{2,}/", "\n", $text));
+}
+
+function guess_category_from_text(string $text): string {
+    $t = strtolower($text);
+    if (strpos($t, 'account') !== false || strpos($t, 'access') !== false) return 'Account/Access';
+    if (strpos($t, 'hardware') !== false || strpos($t, 'equipment') !== false) return 'Hardware';
+    if (strpos($t, 'software') !== false || strpos($t, 'application') !== false) return 'Software';
+    if (strpos($t, 'network') !== false || strpos($t, 'internet') !== false) return 'Network';
+    return 'Other';
+}
+
+function match_after_label(string $text, array $labels): string {
+    foreach ($labels as $label) {
+        if (preg_match('/' . preg_quote($label, '/') . '\s*[:\-]?\s*([^\n]+)/i', $text, $m)) {
+            $val = trim($m[1]);
+            if ($val !== '') return $val;
+        }
+    }
+    return '';
+}
+
+function match_block_after(string $text, string $startLabel, array $stopLabels): string {
+    if (empty($stopLabels)) {
+        $pattern = '/' . preg_quote($startLabel, '/') . '\s*[:\-]?\s*(.*)/is';
+    } else {
+        $quoted = array_map(function ($l) { return preg_quote($l, '/'); }, $stopLabels);
+        $stopPattern = implode('|', $quoted);
+        $pattern = '/' . preg_quote($startLabel, '/') . '\s*[:\-]?\s*(.*?)(?=' . $stopPattern . '|$)/is';
+    }
+    if (preg_match($pattern, $text, $m)) return trim($m[1]);
+    return '';
+}
+
+function parse_it_request_text(string $text): array {
+    $requestDate = match_after_label($text, ['Request Date']);
+    $requestedBy = match_after_label($text, ['Requested By']);
+
+    $requestDetails = match_block_after($text, 'JUSTIFICATION', ['PRIORITY', 'Requested by', 'IT SUPPORT REMARKS']);
+    if ($requestDetails === '') {
+        $requestDetails = match_block_after($text, 'describe the issue', ['PRIORITY', 'Requested by', 'IT SUPPORT REMARKS']);
+    }
+
+    $remarks = match_block_after($text, 'RECOMMENDATIONS', []);
+
+    // Best-effort title from the first row of the "Item / Request / Description" table.
+    $title = '';
+    if (preg_match('/IT REQUEST DETAILS.*?Remarks\s*\n\s*1?\s*(.+)/is', $text, $m)) {
+        $line = trim(strtok($m[1], "\n"));
+        if ($line !== '') $title = $line;
+    }
+    if ($title === '' && $requestDetails !== '') {
+        $title = trim(mb_substr($requestDetails, 0, 80));
+    }
+
+    $issuedDate = '';
+    if ($requestDate !== '' && preg_match('/(\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2}\/\d{2,4})/', $requestDate, $m)) {
+        $issuedDate = $m[1];
+    }
+
+    return [
+        'title'            => $title,
+        'requester'        => $requestedBy,
+        'category'         => guess_category_from_text($text),
+        'request_details'  => $requestDetails,
+        'remarks'          => $remarks,
+        'issued_date_hint' => $issuedDate,
+    ];
+}
+
+// Upload + auto-extract endpoint for the "IT Request Form" — index.php?extract_request=1 (POST, multipart)
+if (isset($_GET['extract_request'])) {
+    header('Content-Type: application/json');
+
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        http_response_code(405);
+        echo json_encode(['error' => 'Method not allowed.']);
+        exit;
+    }
+    if (empty($_FILES['form_file']) || $_FILES['form_file']['error'] !== UPLOAD_ERR_OK) {
+        http_response_code(422);
+        echo json_encode(['error' => 'No file uploaded, or the upload failed.']);
+        exit;
+    }
+
+    $file = $_FILES['form_file'];
+    $maxBytes = 10 * 1024 * 1024; // 10MB
+    if ($file['size'] > $maxBytes) {
+        http_response_code(422);
+        echo json_encode(['error' => 'File is too large (10MB max).']);
+        exit;
+    }
+
+    $origExt = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+    $allowedExt = ['pdf', 'jpg', 'jpeg', 'png', 'docx'];
+    if (!in_array($origExt, $allowedExt, true)) {
+        http_response_code(422);
+        echo json_encode(['error' => 'Unsupported file type. Use PDF, JPG, PNG, or DOCX.']);
+        exit;
+    }
+
+    $uploadDir = __DIR__ . '/uploads/it_requests';
+    if (!is_dir($uploadDir)) @mkdir($uploadDir, 0755, true);
+    $safeName = bin2hex(random_bytes(8)) . '_' . date('Ymd_His') . '.' . $origExt;
+    $destPath = $uploadDir . '/' . $safeName;
+
+    if (!move_uploaded_file($file['tmp_name'], $destPath)) {
+        http_response_code(500);
+        echo json_encode(['error' => 'Failed to save the uploaded file.']);
+        exit;
+    }
+
+    $warnings = [];
+    $text = '';
+
+    try {
+        if ($origExt === 'docx') {
+            $text = extract_text_from_docx($destPath);
+            if ($text === '') $warnings[] = 'Could not read any text from the DOCX file — please fill in the fields manually.';
+        } elseif ($origExt === 'pdf') {
+            if (class_exists('Smalot\PdfParser\Parser')) {
+                $parser = new \Smalot\PdfParser\Parser();
+                $pdf = $parser->parseFile($destPath);
+                $text = $pdf->getText();
+            } else {
+                $warnings[] = 'PDF text extraction isn\'t set up on this server yet (run "composer require smalot/pdfparser"). The file is attached to this request — please fill in the fields manually for now.';
+            }
+        } else { // jpg / jpeg / png
+            $hasTesseract = function_exists('shell_exec') && trim((string) @shell_exec('which tesseract 2>/dev/null')) !== '';
+            if ($hasTesseract) {
+                $escaped = escapeshellarg($destPath);
+                $text = (string) @shell_exec("tesseract $escaped stdout 2>/dev/null");
+            } else {
+                $warnings[] = 'OCR isn\'t set up on this server yet (install the "tesseract-ocr" package). The file is attached to this request — please fill in the fields manually for now.';
+            }
+        }
+    } catch (Throwable $e) {
+        $warnings[] = 'Could not read the file automatically: ' . $e->getMessage();
+    }
+
+    $fields = parse_it_request_text($text);
+    $fields['source_file'] = 'uploads/it_requests/' . $safeName;
+    $fields['warnings'] = $warnings;
+    if ($text !== '') {
+        $fields['warnings'][] = 'This was auto-filled from the uploaded form — please double-check every field, especially Category and Priority (checkbox marks can\'t be read automatically).';
+    }
+
+    echo json_encode($fields);
+    exit;
 }
 
 // Export API: authenticated users can request named reports in CSV or JSON.
@@ -325,6 +521,10 @@ if (isset($_GET['requests_api'])) {
             $requester = trim($data['requester'] ?? '');
             $category  = in_array($data['category'] ?? '', $VALID_CATEGORIES) ? $data['category'] : 'Other';
             $notes     = trim($data['notes'] ?? '');
+            $requestDetails = trim($data['request_details'] ?? '');
+            $remarks        = trim($data['remarks'] ?? '');
+            $priority       = in_array($data['priority'] ?? '', ['Low', 'Normal', 'High'], true) ? $data['priority'] : null;
+            $sourceFile     = trim($data['source_file'] ?? '');
             // "issued" comes from a <input type="datetime-local"> as "YYYY-MM-DDTHH:MM" — swap the
             // T for a space to match MySQL's DATETIME format. Falls back to NOW() if left blank.
             $issuedRaw = trim($data['issued'] ?? '');
@@ -340,8 +540,8 @@ if (isset($_GET['requests_api'])) {
                 $resolvedAt = parse_datetime_local($data['resolved'] ?? null) ?? date('Y-m-d H:i:s');
             }
 
-            $stmt = $pdo->prepare("INSERT INTO it_requests (title, requester, category, status, notes, created_at, resolved_at) VALUES (?, ?, ?, ?, ?, ?, ?)");
-            $stmt->execute([$title, $requester, $category, $status, $notes ?: null, $issuedAt, $resolvedAt]);
+            $stmt = $pdo->prepare("INSERT INTO it_requests (title, requester, category, status, notes, created_at, resolved_at, request_details, remarks, priority, source_file) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->execute([$title, $requester, $category, $status, $notes ?: null, $issuedAt, $resolvedAt, $requestDetails ?: null, $remarks ?: null, $priority, $sourceFile ?: null]);
 
             $newId = (int) $pdo->lastInsertId();
             $stmt  = $pdo->prepare("SELECT * FROM it_requests WHERE id = ?");
@@ -368,6 +568,12 @@ if (isset($_GET['requests_api'])) {
             $requester = array_key_exists('requester', $data) ? trim($data['requester']) : $existing['requester'];
             $category  = in_array($data['category'] ?? '', $VALID_CATEGORIES) ? $data['category'] : $existing['category'];
             $notes     = array_key_exists('notes', $data) ? trim($data['notes']) : $existing['notes'];
+            $requestDetails = array_key_exists('request_details', $data) ? trim($data['request_details']) : $existing['request_details'];
+            $remarks        = array_key_exists('remarks', $data) ? trim($data['remarks']) : $existing['remarks'];
+            $priority       = array_key_exists('priority', $data)
+                ? (in_array($data['priority'], ['Low', 'Normal', 'High'], true) ? $data['priority'] : $existing['priority'])
+                : $existing['priority'];
+            $sourceFile     = array_key_exists('source_file', $data) ? trim($data['source_file']) : $existing['source_file'];
             $issuedAt  = array_key_exists('issued', $data)
                 ? (parse_datetime_local($data['issued']) ?? $existing['created_at'])
                 : $existing['created_at'];
@@ -392,8 +598,8 @@ if (isset($_GET['requests_api'])) {
                 $resolvedAt = null;
             }
 
-            $stmt = $pdo->prepare("UPDATE it_requests SET title=?, requester=?, category=?, notes=?, created_at=?, status=?, resolved_at=? WHERE id=?");
-            $stmt->execute([$title, $requester, $category, $notes ?: null, $issuedAt, $status, $resolvedAt, $id]);
+            $stmt = $pdo->prepare("UPDATE it_requests SET title=?, requester=?, category=?, notes=?, created_at=?, status=?, resolved_at=?, request_details=?, remarks=?, priority=?, source_file=? WHERE id=?");
+            $stmt->execute([$title, $requester, $category, $notes ?: null, $issuedAt, $status, $resolvedAt, $requestDetails ?: null, $remarks ?: null, $priority, $sourceFile ?: null, $id]);
 
             $stmt = $pdo->prepare("SELECT * FROM it_requests WHERE id = ?");
             $stmt->execute([$id]);
@@ -534,6 +740,70 @@ if (isset($_GET['requests_api'])) {
         <p class="view-sub">Small day-to-day IT requests — password resets, printer fixes, app installs.</p>
       </div>
 
+      <!-- Upload modal — drag & drop an IT Request Form (PDF/JPG/PNG/DOCX), the server
+           does a best-effort read of it, then the extracted fields land in an editable
+           review step below before anything is saved (checkbox fields like Category and
+           Priority can't be read reliably from the file, so they always need a human check). -->
+      <div class="modal-overlay view-hidden" id="requestUploadOverlay">
+        <div class="modal-card modal-form">
+          <div class="modal-head">
+            <div class="modal-head-left"><h3>Upload IT Request Form</h3></div>
+            <div class="modal-head-right"><button class="icon-btn" id="requestUploadClose"><i data-lucide="x"></i></button></div>
+          </div>
+
+          <div id="uploadDropStep">
+            <div id="uploadDropZone" style="border:2px dashed #C9CDD6;border-radius:12px;padding:36px 16px;text-align:center;cursor:pointer;background:#FBFCFE;">
+              <i data-lucide="file-up" style="width:28px;height:28px;color:#8A8F98;"></i>
+              <p style="margin:10px 0 4px;font-weight:600;">Drag &amp; drop the IT Request Form here</p>
+              <p style="margin:0;color:#8A8F98;font-size:13px;">or click to choose a file — PDF, JPG, PNG, or DOCX (max 10MB)</p>
+              <input type="file" id="uploadFileInput" accept=".pdf,.jpg,.jpeg,.png,.docx" style="display:none;">
+            </div>
+            <div id="uploadStatus" style="margin-top:12px;color:#8A8F98;font-size:13px;"></div>
+            <div class="form-actions">
+              <button type="button" class="btn btn-ghost" id="requestUploadCancel">Cancel</button>
+            </div>
+          </div>
+
+          <form class="form-grid request-form view-hidden" id="uploadReviewForm">
+            <div class="field span-2" id="uploadWarnings" style="background:#FFF7E6;border:1px solid #F3D89A;border-radius:8px;padding:10px 12px;font-size:13px;color:#7A5B10;"></div>
+            <label class="field span-2"><span>What's the request?</span><input type="text" id="uTitle" required></label>
+            <label class="field"><span>Requested by</span><input type="text" id="uRequester"></label>
+            <label class="field"><span>Category (please confirm — read from checkboxes, not guaranteed)</span>
+              <select id="uCategory">
+                <option value="Hardware">Hardware</option>
+                <option value="Software">Software</option>
+                <option value="Account/Access">Account/Access</option>
+                <option value="Network">Network</option>
+                <option value="Other" selected>Other</option>
+              </select>
+            </label>
+            <label class="field"><span>Priority (please confirm)</span>
+              <select id="uPriority">
+                <option value="">—</option>
+                <option value="Low">Low</option>
+                <option value="Normal">Normal</option>
+                <option value="High">High</option>
+              </select>
+            </label>
+            <label class="field"><span>Date &amp; time issued</span><input type="datetime-local" id="uIssued"></label>
+            <label class="field"><span>Status</span>
+              <select id="uStatus">
+                <option value="Open" selected>Open</option>
+                <option value="In Progress">In Progress</option>
+                <option value="Done">Done (already resolved)</option>
+              </select>
+            </label>
+            <label class="field span-2"><span>Description / Issue / Justification</span><textarea id="uRequestDetails" rows="3"></textarea></label>
+            <label class="field span-2"><span>IT Support Remarks / Recommendations</span><textarea id="uRemarks" rows="2"></textarea></label>
+            <input type="hidden" id="uSourceFile">
+            <div class="form-actions span-2">
+              <button type="button" class="btn btn-ghost" id="requestUploadBack">Back</button>
+              <button type="submit" class="btn btn-primary"><i data-lucide="check"></i> Create request</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
       <!-- New-request modal — opened from the "New Request" button in the All Requests
            panel header below, so the table is what you see first. -->
       <div class="modal-overlay view-hidden" id="requestNewOverlay">
@@ -616,6 +886,7 @@ if (isset($_GET['requests_api'])) {
         <div class="panel-head">
           <h2>All Requests</h2>
           <div class="panel-head-right">
+            <button class="btn btn-ghost" id="btnUploadRequest"><i data-lucide="upload"></i> Upload IT Request Form</button>
             <button class="btn btn-primary" id="btnNewRequest"><i data-lucide="plus"></i> New Request</button>
             <span class="panel-sub" id="requestsCount"></span>
           </div>
@@ -774,6 +1045,138 @@ if (isset($_GET['requests_api'])) {
         setTimeout(closeModal, 150);
       });
     }
+  })();
+
+  // Upload IT Request Form — drag & drop, extract, review, create.
+  (function () {
+    var overlay   = document.getElementById('requestUploadOverlay');
+    var openBtn   = document.getElementById('btnUploadRequest');
+    var closeBtn  = document.getElementById('requestUploadClose');
+    var cancelBtn = document.getElementById('requestUploadCancel');
+    var backBtn   = document.getElementById('requestUploadBack');
+    if (!overlay || !openBtn) return;
+
+    var dropStep    = document.getElementById('uploadDropStep');
+    var dropZone    = document.getElementById('uploadDropZone');
+    var fileInput   = document.getElementById('uploadFileInput');
+    var statusEl    = document.getElementById('uploadStatus');
+    var reviewForm  = document.getElementById('uploadReviewForm');
+    var warningsBox = document.getElementById('uploadWarnings');
+
+    function toDatetimeLocal(v) {
+      // Accepts "YYYY-MM-DD" and turns it into a datetime-local value defaulting to 09:00.
+      if (!v) return '';
+      var m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})/);
+      return m ? (m[1] + '-' + m[2] + '-' + m[3] + 'T09:00') : '';
+    }
+
+    function resetModal() {
+      dropStep.classList.remove('view-hidden');
+      reviewForm.classList.add('view-hidden');
+      statusEl.textContent = '';
+      warningsBox.textContent = '';
+      warningsBox.style.display = 'none';
+      fileInput.value = '';
+      reviewForm.reset();
+    }
+
+    function openModal() { resetModal(); overlay.classList.remove('view-hidden'); }
+    function closeModal() { overlay.classList.add('view-hidden'); }
+
+    openBtn.addEventListener('click', openModal);
+    if (closeBtn) closeBtn.addEventListener('click', closeModal);
+    if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+    if (backBtn) backBtn.addEventListener('click', resetModal);
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) closeModal(); });
+
+    dropZone.addEventListener('click', function () { fileInput.click(); });
+    dropZone.addEventListener('dragover', function (e) { e.preventDefault(); dropZone.style.borderColor = '#4C6FFF'; });
+    dropZone.addEventListener('dragleave', function () { dropZone.style.borderColor = '#C9CDD6'; });
+    dropZone.addEventListener('drop', function (e) {
+      e.preventDefault();
+      dropZone.style.borderColor = '#C9CDD6';
+      if (e.dataTransfer.files && e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', function () {
+      if (fileInput.files && fileInput.files[0]) handleFile(fileInput.files[0]);
+    });
+
+    function handleFile(file) {
+      statusEl.textContent = 'Reading ' + file.name + ' …';
+      var fd = new FormData();
+      fd.append('form_file', file);
+
+      fetch('index.php?extract_request=1', { method: 'POST', body: fd })
+        .then(function (r) { return r.json().then(function (body) { return { ok: r.ok, body: body }; }); })
+        .then(function (res) {
+          if (!res.ok) {
+            statusEl.textContent = (res.body && res.body.error) ? res.body.error : 'Could not read that file.';
+            return;
+          }
+          fillReview(res.body);
+          dropStep.classList.add('view-hidden');
+          reviewForm.classList.remove('view-hidden');
+        })
+        .catch(function () {
+          statusEl.textContent = 'Upload failed — please check your connection and try again.';
+        });
+    }
+
+    function fillReview(f) {
+      document.getElementById('uTitle').value = f.title || '';
+      document.getElementById('uRequester').value = f.requester || '';
+      document.getElementById('uCategory').value = f.category || 'Other';
+      document.getElementById('uRequestDetails').value = f.request_details || '';
+      document.getElementById('uRemarks').value = f.remarks || '';
+      document.getElementById('uSourceFile').value = f.source_file || '';
+      document.getElementById('uIssued').value = toDatetimeLocal(f.issued_date_hint);
+
+      if (f.warnings && f.warnings.length) {
+        warningsBox.style.display = 'block';
+        warningsBox.innerHTML = '<b>Please review:</b><br>' + f.warnings.map(function (w) {
+          return '• ' + w.replace(/</g, '&lt;');
+        }).join('<br>');
+      } else {
+        warningsBox.style.display = 'none';
+      }
+    }
+
+    reviewForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var status = document.getElementById('uStatus').value;
+      var payload = {
+        title: document.getElementById('uTitle').value,
+        requester: document.getElementById('uRequester').value,
+        category: document.getElementById('uCategory').value,
+        priority: document.getElementById('uPriority').value,
+        status: status,
+        issued: document.getElementById('uIssued').value,
+        request_details: document.getElementById('uRequestDetails').value,
+        remarks: document.getElementById('uRemarks').value,
+        source_file: document.getElementById('uSourceFile').value
+      };
+
+      fetch('index.php?requests_api=1', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+        .then(function (r) { return r.json().then(function (body) { return { ok: r.ok, body: body }; }); })
+        .then(function (res) {
+          if (!res.ok) {
+            statusEl.textContent = (res.body && res.body.error) ? res.body.error : 'Could not create the request.';
+            return;
+          }
+          closeModal();
+          // Refresh so the new record shows up in the All Requests table.
+          // If requests.js exposes its own reload/render function for the table,
+          // call that instead of a full page reload.
+          window.location.reload();
+        })
+        .catch(function () {
+          statusEl.textContent = 'Could not create the request — please try again.';
+        });
+    });
   })();
 </script>
 </body>

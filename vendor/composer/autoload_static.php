@@ -6,7 +6,15 @@ namespace Composer\Autoload;
 
 class ComposerStaticInita6039fb7a250f8d92ebeb010749aa188
 {
+    public static $files = array (
+        '0e6d7bf4a5811bfa5cf40c5ccd6fae6a' => __DIR__ . '/..' . '/symfony/polyfill-mbstring/bootstrap.php',
+    );
+
     public static $prefixLengthsPsr4 = array (
+        'S' =>
+        array (
+            'Symfony\\Polyfill\\Mbstring\\' => 26,
+        ),
         'P' =>
         array (
             'PhpOffice\\PhpPresentation\\' => 26,
@@ -15,6 +23,10 @@ class ComposerStaticInita6039fb7a250f8d92ebeb010749aa188
     );
 
     public static $prefixDirsPsr4 = array (
+        'Symfony\\Polyfill\\Mbstring\\' =>
+        array (
+            0 => __DIR__ . '/..' . '/symfony/polyfill-mbstring',
+        ),
         'PhpOffice\\PhpPresentation\\' =>
         array (
             0 => __DIR__ . '/..' . '/phpoffice/phppresentation/src/PhpPresentation',
@@ -22,6 +34,16 @@ class ComposerStaticInita6039fb7a250f8d92ebeb010749aa188
         'PhpOffice\\Common\\' =>
         array (
             0 => __DIR__ . '/..' . '/phpoffice/common/src/Common',
+        ),
+    );
+
+    public static $prefixesPsr0 = array (
+        'S' =>
+        array (
+            'Smalot\\PdfParser\\' =>
+            array (
+                0 => __DIR__ . '/..' . '/smalot/pdfparser/src',
+            ),
         ),
     );
 
@@ -35,6 +57,7 @@ class ComposerStaticInita6039fb7a250f8d92ebeb010749aa188
         return \Closure::bind(function () use ($loader) {
             $loader->prefixLengthsPsr4 = ComposerStaticInita6039fb7a250f8d92ebeb010749aa188::$prefixLengthsPsr4;
             $loader->prefixDirsPsr4 = ComposerStaticInita6039fb7a250f8d92ebeb010749aa188::$prefixDirsPsr4;
+            $loader->prefixesPsr0 = ComposerStaticInita6039fb7a250f8d92ebeb010749aa188::$prefixesPsr0;
             $loader->classMap = ComposerStaticInita6039fb7a250f8d92ebeb010749aa188::$classMap;
 
         }, null, ClassLoader::class);
