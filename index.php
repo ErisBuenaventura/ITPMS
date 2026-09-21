@@ -197,17 +197,30 @@ if (isset($_GET['extract_request'])) {
                 $warnings[] = 'PDF text extraction isn\'t set up on this server yet (run "composer require smalot/pdfparser"). The file is attached to this request — please fill in the fields manually for now.';
             }
         } else { // jpg / jpeg / png
-            $hasTesseract = function_exists('shell_exec') && trim((string) @shell_exec('which tesseract 2>/dev/null')) !== '';
-            if ($hasTesseract) {
-                $escaped = escapeshellarg($destPath);
-                $text = (string) @shell_exec("tesseract $escaped stdout 2>/dev/null");
-            } else {
-                $warnings[] = 'OCR isn\'t set up on this server yet (install the "tesseract-ocr" package). The file is attached to this request — please fill in the fields manually for now.';
+
+        // Windows/XAMPP Tesseract executable path
+        $tesseractPath = 'C:\\Program Files\\Tesseract-OCR\\tesseract.exe';
+
+        $hasTesseract = function_exists('shell_exec') && is_file($tesseractPath);
+
+        if ($hasTesseract) {
+            $escapedTesseract = escapeshellarg($tesseractPath);
+            $escapedImage = escapeshellarg($destPath);
+
+            $command = $escapedTesseract . ' ' . $escapedImage . ' stdout 2>NUL';
+
+            $text = (string) @shell_exec($command);
+
+            if (trim($text) === '') {
+                $warnings[] = 'OCR could not extract any text from the uploaded image — please fill in the fields manually.';
             }
+        } else {
+            $warnings[] = 'OCR isn\'t set up on this server yet. Please check that Tesseract OCR is installed at C:\\Program Files\\Tesseract-OCR\\tesseract.exe. The file is attached to this request — please fill in the fields manually for now.';
         }
-    } catch (Throwable $e) {
-        $warnings[] = 'Could not read the file automatically: ' . $e->getMessage();
-    }
+        }
+      } catch (Throwable $e) {
+        $warnings[] = 'Could not process the uploaded file automatically — please fill in the fields manually.';
+      }
 
     $fields = parse_it_request_text($text);
     $fields['source_file'] = 'uploads/it_requests/' . $safeName;
@@ -627,17 +640,17 @@ if (isset($_GET['requests_api'])) {
 ?>
 <!DOCTYPE html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>ITPMS — IT Project Management System</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
-<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
-<link rel="stylesheet" href="assets/css/dashboard.css">
-<link rel="stylesheet" href="assets/css/requests.css">
-</head>
+  <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>ITPMS — IT Project Management System</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <link rel="stylesheet" href="assets/css/dashboard.css">
+    <link rel="stylesheet" href="assets/css/requests.css">
+  </head>
 <body>
 
 <div class="app-shell">
@@ -1017,167 +1030,5 @@ if (isset($_GET['requests_api'])) {
 
 <script src="assets/js/dashboard.js"></script>
 <script src="assets/js/requests.js"></script>
-<script>
-  (function () {
-    var overlay = document.getElementById('requestNewOverlay');
-    var openBtn = document.getElementById('btnNewRequest');
-    var closeBtn = document.getElementById('requestNewClose');
-    var cancelBtn = document.getElementById('requestNewCancel');
-    var form = document.getElementById('requestForm');
-    if (!overlay || !openBtn) return;
-
-    function openModal() {
-      overlay.classList.remove('view-hidden');
-    }
-    function closeModal() {
-      overlay.classList.add('view-hidden');
-    }
-
-    openBtn.addEventListener('click', openModal);
-    if (closeBtn) closeBtn.addEventListener('click', closeModal);
-    if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
-    overlay.addEventListener('click', function (e) {
-      if (e.target === overlay) closeModal();
-    });
-
-    if (form) {
-      form.addEventListener('submit', function () {
-        setTimeout(closeModal, 150);
-      });
-    }
-  })();
-
-  // Upload IT Request Form — drag & drop, extract, review, create.
-  (function () {
-    var overlay   = document.getElementById('requestUploadOverlay');
-    var openBtn   = document.getElementById('btnUploadRequest');
-    var closeBtn  = document.getElementById('requestUploadClose');
-    var cancelBtn = document.getElementById('requestUploadCancel');
-    var backBtn   = document.getElementById('requestUploadBack');
-    if (!overlay || !openBtn) return;
-
-    var dropStep    = document.getElementById('uploadDropStep');
-    var dropZone    = document.getElementById('uploadDropZone');
-    var fileInput   = document.getElementById('uploadFileInput');
-    var statusEl    = document.getElementById('uploadStatus');
-    var reviewForm  = document.getElementById('uploadReviewForm');
-    var warningsBox = document.getElementById('uploadWarnings');
-
-    function toDatetimeLocal(v) {
-      // Accepts "YYYY-MM-DD" and turns it into a datetime-local value defaulting to 09:00.
-      if (!v) return '';
-      var m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})/);
-      return m ? (m[1] + '-' + m[2] + '-' + m[3] + 'T09:00') : '';
-    }
-
-    function resetModal() {
-      dropStep.classList.remove('view-hidden');
-      reviewForm.classList.add('view-hidden');
-      statusEl.textContent = '';
-      warningsBox.textContent = '';
-      warningsBox.style.display = 'none';
-      fileInput.value = '';
-      reviewForm.reset();
-    }
-
-    function openModal() { resetModal(); overlay.classList.remove('view-hidden'); }
-    function closeModal() { overlay.classList.add('view-hidden'); }
-
-    openBtn.addEventListener('click', openModal);
-    if (closeBtn) closeBtn.addEventListener('click', closeModal);
-    if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
-    if (backBtn) backBtn.addEventListener('click', resetModal);
-    overlay.addEventListener('click', function (e) { if (e.target === overlay) closeModal(); });
-
-    dropZone.addEventListener('click', function () { fileInput.click(); });
-    dropZone.addEventListener('dragover', function (e) { e.preventDefault(); dropZone.style.borderColor = '#4C6FFF'; });
-    dropZone.addEventListener('dragleave', function () { dropZone.style.borderColor = '#C9CDD6'; });
-    dropZone.addEventListener('drop', function (e) {
-      e.preventDefault();
-      dropZone.style.borderColor = '#C9CDD6';
-      if (e.dataTransfer.files && e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
-    });
-    fileInput.addEventListener('change', function () {
-      if (fileInput.files && fileInput.files[0]) handleFile(fileInput.files[0]);
-    });
-
-    function handleFile(file) {
-      statusEl.textContent = 'Reading ' + file.name + ' …';
-      var fd = new FormData();
-      fd.append('form_file', file);
-
-      fetch('index.php?extract_request=1', { method: 'POST', body: fd })
-        .then(function (r) { return r.json().then(function (body) { return { ok: r.ok, body: body }; }); })
-        .then(function (res) {
-          if (!res.ok) {
-            statusEl.textContent = (res.body && res.body.error) ? res.body.error : 'Could not read that file.';
-            return;
-          }
-          fillReview(res.body);
-          dropStep.classList.add('view-hidden');
-          reviewForm.classList.remove('view-hidden');
-        })
-        .catch(function () {
-          statusEl.textContent = 'Upload failed — please check your connection and try again.';
-        });
-    }
-
-    function fillReview(f) {
-      document.getElementById('uTitle').value = f.title || '';
-      document.getElementById('uRequester').value = f.requester || '';
-      document.getElementById('uCategory').value = f.category || 'Other';
-      document.getElementById('uRequestDetails').value = f.request_details || '';
-      document.getElementById('uRemarks').value = f.remarks || '';
-      document.getElementById('uSourceFile').value = f.source_file || '';
-      document.getElementById('uIssued').value = toDatetimeLocal(f.issued_date_hint);
-
-      if (f.warnings && f.warnings.length) {
-        warningsBox.style.display = 'block';
-        warningsBox.innerHTML = '<b>Please review:</b><br>' + f.warnings.map(function (w) {
-          return '• ' + w.replace(/</g, '&lt;');
-        }).join('<br>');
-      } else {
-        warningsBox.style.display = 'none';
-      }
-    }
-
-    reviewForm.addEventListener('submit', function (e) {
-      e.preventDefault();
-      var status = document.getElementById('uStatus').value;
-      var payload = {
-        title: document.getElementById('uTitle').value,
-        requester: document.getElementById('uRequester').value,
-        category: document.getElementById('uCategory').value,
-        priority: document.getElementById('uPriority').value,
-        status: status,
-        issued: document.getElementById('uIssued').value,
-        request_details: document.getElementById('uRequestDetails').value,
-        remarks: document.getElementById('uRemarks').value,
-        source_file: document.getElementById('uSourceFile').value
-      };
-
-      fetch('index.php?requests_api=1', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      })
-        .then(function (r) { return r.json().then(function (body) { return { ok: r.ok, body: body }; }); })
-        .then(function (res) {
-          if (!res.ok) {
-            statusEl.textContent = (res.body && res.body.error) ? res.body.error : 'Could not create the request.';
-            return;
-          }
-          closeModal();
-          // Refresh so the new record shows up in the All Requests table.
-          // If requests.js exposes its own reload/render function for the table,
-          // call that instead of a full page reload.
-          window.location.reload();
-        })
-        .catch(function () {
-          statusEl.textContent = 'Could not create the request — please try again.';
-        });
-    });
-  })();
-</script>
 </body>
 </html>

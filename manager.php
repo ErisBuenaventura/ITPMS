@@ -210,7 +210,6 @@ try {
     </div>
     <div class="top-bar-right">
       <span class="read-only-badge"><i data-lucide="lock"></i> Read only</span>
-      <div class="status-line"><span class="live-dot"></span>Live · last updated <b id="lastUpdated">just now</b></div>
       <button type="button" id="printReportBtn" class="print-btn no-print"><i data-lucide="printer"></i> Print / Save as PDF</button>
     </div>
   </div>

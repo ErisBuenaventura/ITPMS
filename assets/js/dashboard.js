@@ -806,3 +806,4 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   document.getElementById('sidebarBackdrop').addEventListener('click', closeSidebar);
 });
+

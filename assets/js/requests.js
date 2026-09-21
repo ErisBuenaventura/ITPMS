@@ -223,3 +223,165 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('requestEditClose').addEventListener('click', () => closeModal('requestEditOverlay'));
   document.getElementById('requestEditCancel').addEventListener('click', () => closeModal('requestEditOverlay'));
 });
+
+  (function () {
+    var overlay = document.getElementById('requestNewOverlay');
+    var openBtn = document.getElementById('btnNewRequest');
+    var closeBtn = document.getElementById('requestNewClose');
+    var cancelBtn = document.getElementById('requestNewCancel');
+    var form = document.getElementById('requestForm');
+    if (!overlay || !openBtn) return;
+
+    function openModal() {
+      overlay.classList.remove('view-hidden');
+    }
+    function closeModal() {
+      overlay.classList.add('view-hidden');
+    }
+
+    openBtn.addEventListener('click', openModal);
+    if (closeBtn) closeBtn.addEventListener('click', closeModal);
+    if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+    overlay.addEventListener('click', function (e) {
+      if (e.target === overlay) closeModal();
+    });
+
+    if (form) {
+      form.addEventListener('submit', function () {
+        setTimeout(closeModal, 150);
+      });
+    }
+  })();
+
+  // Upload IT Request Form — drag & drop, extract, review, create.
+  (function () {
+    var overlay   = document.getElementById('requestUploadOverlay');
+    var openBtn   = document.getElementById('btnUploadRequest');
+    var closeBtn  = document.getElementById('requestUploadClose');
+    var cancelBtn = document.getElementById('requestUploadCancel');
+    var backBtn   = document.getElementById('requestUploadBack');
+    if (!overlay || !openBtn) return;
+
+    var dropStep    = document.getElementById('uploadDropStep');
+    var dropZone    = document.getElementById('uploadDropZone');
+    var fileInput   = document.getElementById('uploadFileInput');
+    var statusEl    = document.getElementById('uploadStatus');
+    var reviewForm  = document.getElementById('uploadReviewForm');
+    var warningsBox = document.getElementById('uploadWarnings');
+
+    function toDatetimeLocal(v) {
+      // Accepts "YYYY-MM-DD" and turns it into a datetime-local value defaulting to 09:00.
+      if (!v) return '';
+      var m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})/);
+      return m ? (m[1] + '-' + m[2] + '-' + m[3] + 'T09:00') : '';
+    }
+
+    function resetModal() {
+      dropStep.classList.remove('view-hidden');
+      reviewForm.classList.add('view-hidden');
+      statusEl.textContent = '';
+      warningsBox.textContent = '';
+      warningsBox.style.display = 'none';
+      fileInput.value = '';
+      reviewForm.reset();
+    }
+
+    function openModal() { resetModal(); overlay.classList.remove('view-hidden'); }
+    function closeModal() { overlay.classList.add('view-hidden'); }
+
+    openBtn.addEventListener('click', openModal);
+    if (closeBtn) closeBtn.addEventListener('click', closeModal);
+    if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+    if (backBtn) backBtn.addEventListener('click', resetModal);
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) closeModal(); });
+
+    dropZone.addEventListener('click', function () { fileInput.click(); });
+    dropZone.addEventListener('dragover', function (e) { e.preventDefault(); dropZone.style.borderColor = '#4C6FFF'; });
+    dropZone.addEventListener('dragleave', function () { dropZone.style.borderColor = '#C9CDD6'; });
+    dropZone.addEventListener('drop', function (e) {
+      e.preventDefault();
+      dropZone.style.borderColor = '#C9CDD6';
+      if (e.dataTransfer.files && e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', function () {
+      if (fileInput.files && fileInput.files[0]) handleFile(fileInput.files[0]);
+    });
+
+    function handleFile(file) {
+      statusEl.textContent = 'Reading ' + file.name + ' …';
+      var fd = new FormData();
+      fd.append('form_file', file);
+
+      fetch('index.php?extract_request=1', { method: 'POST', body: fd })
+        .then(function (r) { return r.json().then(function (body) { return { ok: r.ok, body: body }; }); })
+        .then(function (res) {
+          if (!res.ok) {
+            statusEl.textContent = (res.body && res.body.error) ? res.body.error : 'Could not read that file.';
+            return;
+          }
+          fillReview(res.body);
+          dropStep.classList.add('view-hidden');
+          reviewForm.classList.remove('view-hidden');
+        })
+        .catch(function () {
+          statusEl.textContent = 'Upload failed — please check your connection and try again.';
+        });
+    }
+
+    function fillReview(f) {
+      document.getElementById('uTitle').value = f.title || '';
+      document.getElementById('uRequester').value = f.requester || '';
+      document.getElementById('uCategory').value = f.category || 'Other';
+      document.getElementById('uPriority').value = f.priority || '';
+      document.getElementById('uRequestDetails').value = f.request_details || '';
+      document.getElementById('uRemarks').value = f.remarks || '';
+      document.getElementById('uSourceFile').value = f.source_file || '';
+      document.getElementById('uIssued').value = toDatetimeLocal(f.issued_date_hint);
+
+      if (f.warnings && f.warnings.length) {
+        warningsBox.style.display = 'block';
+        warningsBox.innerHTML = '<b>Please review:</b><br>' + f.warnings.map(function (w) {
+          return '• ' + w.replace(/</g, '&lt;');
+        }).join('<br>');
+      } else {
+        warningsBox.style.display = 'none';
+      }
+    }
+
+    reviewForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var status = document.getElementById('uStatus').value;
+      var payload = {
+        title: document.getElementById('uTitle').value,
+        requester: document.getElementById('uRequester').value,
+        category: document.getElementById('uCategory').value,
+        priority: document.getElementById('uPriority').value,
+        status: status,
+        issued: document.getElementById('uIssued').value,
+        request_details: document.getElementById('uRequestDetails').value,
+        remarks: document.getElementById('uRemarks').value,
+        source_file: document.getElementById('uSourceFile').value
+      };
+
+      fetch('index.php?requests_api=1', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+        .then(function (r) { return r.json().then(function (body) { return { ok: r.ok, body: body }; }); })
+        .then(function (res) {
+          if (!res.ok) {
+            statusEl.textContent = (res.body && res.body.error) ? res.body.error : 'Could not create the request.';
+            return;
+          }
+          closeModal();
+          // Refresh so the new record shows up in the All Requests table.
+          // If requests.js exposes its own reload/render function for the table,
+          // call that instead of a full page reload.
+          window.location.reload();
+        })
+        .catch(function () {
+          statusEl.textContent = 'Could not create the request — please try again.';
+        });
+    });
+  })();

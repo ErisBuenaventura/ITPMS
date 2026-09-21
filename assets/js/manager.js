@@ -130,6 +130,19 @@ function render() {
 function fitToScreen() {
   const outer = document.getElementById('fitOuter');
   const inner = document.getElementById('fitInner');
+  if (!outer || !inner) return;
+
+  // Tablet & phone (<=960px, matches manager.css's breakpoint) use a
+  // normal scrolling page with the table reflowed into cards — no
+  // scale-to-fit transform here. Clear any transform left over from a
+  // desktop->mobile resize so the card layout isn't squashed/stretched.
+  if (window.innerWidth <= 960) {
+    inner.style.transform = '';
+    inner.style.width = '';
+    outer.style.overflowY = '';
+    return;
+  }
+
   const outerW = outer.clientWidth;
   const outerH = outer.clientHeight;
 
@@ -211,7 +224,6 @@ async function refresh() {
     const res = await fetch('manager.php?api=1');
     if (!res.ok) return;
     projects = await res.json();
-    document.getElementById('lastUpdated').textContent = new Date().toLocaleTimeString();
     render();
   } catch (e) { /* keep showing last known data if the request fails */ }
 }
@@ -336,4 +348,3 @@ window.addEventListener('beforeprint', () => {
 window.addEventListener('afterprint', () => {
   requestAnimationFrame(fitToScreen); // restore the on-screen fit
 });
-
