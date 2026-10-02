@@ -8,23 +8,11 @@
   --cancelled: #C4483C; --cancelled-soft: #FBE7E5;
   --notstarted: #8A8F98; --notstarted-soft: #EEEFF1;
 }
+
 html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); font-family: 'Inter', sans-serif; -webkit-font-smoothing: antialiased; }
 .mono { font-family: 'IBM Plex Mono', monospace; }
 .view-hidden { display: none !important; }
 
-/* Desktop/laptop: no page scroll — the dashboard fills the
-   viewport height via flex, not a JS-computed transform scale. A scale
-   trick only knows how to shrink content that's too tall; it was never
-   built to grow content to fill leftover space, which is what caused
-   the "compressed at the top, empty space below" look. Flex-fill solves
-   both directions at once: too-short content stretches to fill the
-   screen, too-tall content just scrolls within its own panel instead
-   (see .table-scroll / .chart-box below).
-
-   This no-scroll / fit-to-viewport treatment is DESKTOP ONLY now
-   (min-width: 961px, see below). Tablet and phone get a normal
-   scrolling page with content reflowed into cards — see the
-   "TABLET & PHONE" breakpoint near the bottom of this file. */
 @media (min-width: 961px) {
   html, body { height: 100%; overflow: hidden; }
 }
@@ -48,11 +36,6 @@ html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); fo
 .print-meta { font-size: 12px; color: var(--ink-soft); margin: -6px 0 12px; }
 .print-group-row td { background: #F5F6F8; font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 13px; color: var(--ink); padding: 10px 12px; border-bottom: 2px solid var(--border); }
 
-/* ---------- fit-outer/fit-inner: a normal flex column that fills all
-   remaining height below the top bar, on desktop. #fitInner only gets
-   a JS transform:scale(...) applied on desktop (manager.js checks the
-   viewport width before touching it) — on tablet/phone this is a plain
-   block that scrolls with the page. ---------- */
 .fit-outer { flex: 1; min-height: 0; display: flex; overflow: hidden; }
 .fit-inner { flex: 1; min-height: 0; width: 100%; display: flex; flex-direction: column; gap: 14px; }
 
@@ -61,10 +44,6 @@ html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); fo
 .stat-count { font-family: 'Space Grotesk', sans-serif; font-size: 28px; font-weight: 700; }
 .stat-label { font-size: 12px; color: var(--ink-soft); font-weight: 500; margin-top: 3px; }
 
-/* ---------- overview panel: charts. chart-box flex-fills its panel on
-   desktop; below 961px it gets a fixed height floor (set in the
-   tablet/phone breakpoint) since there's no leftover height to fill on
-   a scrolling page. ---------- */
 .panel-body { padding: 14px 18px; flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .chart-grid { display: flex; gap: 12px; align-items: stretch; flex: 1; min-height: 0; }
 .chart-grid.single-chart { align-items: stretch; }
@@ -76,21 +55,12 @@ html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); fo
 .panel:hover { box-shadow: 0 4px 18px rgba(27,36,48,0.05); }
 .panel-head { padding: 13px 20px; border-bottom: 1px solid #EDEFF3; font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 15.5px; flex-shrink: 0; }
 
-/* ---------- two-column layout: projects (left) + employee IT concerns
-   (right). Fills remaining height on desktop (flex:1 on the row +
-   min-height:0 down the chain) so both panels stretch instead of
-   sitting at their minimum content height. Stacks into a single column
-   on tablet/phone — see the breakpoint below. ---------- */
 .mgr-columns { display: flex; gap: 16px; align-items: stretch; flex: 1; min-height: 0; }
 .mgr-col-left { flex: 0 0 60%; min-width: 0; display: flex; min-height: 0; }
 .mgr-col-right { flex: 0 0 40%; min-width: 0; display: flex; flex-direction: column; gap: 14px; min-height: 0; }
 .mgr-col-left > .panel { flex: 1; }
 .mgr-col-right > .panel { min-height: 0; }
-/* The chart panel has no distinguishing class in the markup — it's just
-   .panel like every other panel. Target it by what it actually contains
-   instead of a class that was never there, so it sizes to its own
-   content (flex: 0 0 auto) while the Concerns panel below it gets the
-   real leftover space (flex: 1). */
+
 .mgr-col-right > .panel:has(.chart-grid) { flex: 0 0 auto; }
 .mgr-col-right > .panel:not(:has(.chart-grid)) { flex: 1; }
 
@@ -99,11 +69,6 @@ html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); fo
 .req-date .req-date-day { display: block; font-size: 13px; color: var(--ink); font-weight: 600; }
 .req-date .req-date-time { display: block; font-size: 12px; color: var(--ink-soft); margin-top: 4px; }
 
-/* ---------- table: on desktop this scrolls internally within its own
-   panel (flex:1; min-height:0; overflow-y:auto) rather than the whole
-   page growing to fit every row — this is what lets the panel around it
-   stretch to fill available height cleanly. On tablet/phone the table
-   converts to stacked cards and the page itself scrolls instead. ---------- */
 .table-scroll { overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch; flex: 1; min-height: 0; }
 table.mgr-table { border-collapse: collapse; border-spacing: 0; width: 100%; min-width: 0; table-layout: fixed; }
 table.mgr-table.mgr-table-compact { min-width: 0; }
@@ -137,8 +102,6 @@ table.mgr-table td:nth-child(7), table.mgr-table td:nth-child(8) { padding-left:
 .req-requester { text-align: left; }
 .req-date { text-align: left; }
 
-/* row padding opened up slightly now that panels have real room to
-   breathe instead of being squeezed to minimum content height */
 table.mgr-table td { padding: 10px 12px; border-bottom: 1px solid #F2F3F5; vertical-align: middle; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 table.mgr-table th:nth-child(2), table.mgr-table td:nth-child(2) { padding-right: 6px; }
 table.mgr-table th:nth-child(3), table.mgr-table td:nth-child(3) { padding-left: 6px; }
@@ -159,12 +122,6 @@ table.mgr-table.mgr-table-compact th:nth-child(4), table.mgr-table.mgr-table-com
 table.mgr-table.mgr-table-compact th:nth-child(5), table.mgr-table.mgr-table-compact td:nth-child(5) { width: 120px; }
 .proj-id { font-size: 10.5px; color: #8A8F98; font-weight: 500; margin-left: 6px; }
 
-/* ---------- Employee IT Concerns: the Request title reuses .proj-name
-   (2-line clamp + ellipsis, tuned for the dense Projects table) but a
-   support-request title has nowhere else to be read in full — there's
-   no detail modal for this panel like there is for projects. Give the
-   title its own unclamped rule, specific enough to win over the shared
-   .proj-name clamp above without touching the Projects table at all. ---------- */
 table.mgr-table.mgr-table-compact td:first-child .proj-name {
   display: block;
   -webkit-line-clamp: unset;
@@ -177,13 +134,6 @@ table.mgr-table.mgr-table-compact td:first-child .proj-name {
   overflow-wrap: break-word;
 }
 
-/* ---------- "Owner"/"Priority" field labels used by the Projects table
-   card layout on tablet/phone (see breakpoint below). Scoped to
-   .mgr-col-left's table specifically — NOT to `.mgr-table` in general —
-   because `.mgr-table-compact` (Employee IT Concerns) also carries the
-   `.mgr-table` class, and an unscoped selector here would otherwise
-   paint a stray "Owner" label onto that table's 3rd column (Status)
-   too, which is not a thing that table has. ---------- */
 .mgr-col-left table.mgr-table td:nth-child(3)::before,
 .mgr-col-left table.mgr-table td:nth-child(4)::before {
   display: block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
@@ -214,7 +164,6 @@ table.mgr-table tbody tr:hover { background-color: #FAFBFC; }
 .icon-btn-disabled { opacity: .3; cursor: default; }
 .icon-btn-disabled:hover { background: transparent; color: var(--ink-soft); }
 
-/* ---------- view modal (progress chart, read-only) ---------- */
 .modal-overlay { position: fixed; inset: 0; background: rgba(27,36,48,0.45); backdrop-filter: blur(2px); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
 .modal-card { background: var(--surface); border-radius: 14px; width: min(760px, 100%); max-height: 90vh; box-shadow: 0 20px 60px rgba(27,36,48,0.25); display: flex; flex-direction: column; overflow: hidden; }
 .modal-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 16px 20px; border-bottom: 1px solid #EDEFF3; }
@@ -240,19 +189,6 @@ table.mgr-table tbody tr:hover { background-color: #FAFBFC; }
   .view-details { border-right: none; border-bottom: 1px solid #EDEFF3; }
 }
 
-/* =============================================================
-   TABLET & PHONE breakpoint (max-width: 960px)
-   ----------------------------------------------------------------
-   Everything at tablet width and below shares one strategy: the page
-   scrolls normally (no more forced one-screen scale-to-fit — that
-   trick only worked on desktop, where there was reliably enough width
-   for a dense multi-column table; at tablet/phone widths the same
-   table was just getting squeezed into unreadable slivers with no way
-   to scroll sideways to see the rest). Both the "All Projects" table
-   and the "Employee IT Concerns" table convert into stacked, readable
-   cards here. A nested breakpoint further down tightens spacing/type
-   specifically for phone-sized screens.
-   ============================================================= */
 @media (max-width: 960px) {
   html, body { height: auto; overflow: auto; }
   .page { height: auto; padding: 20px 20px 28px; }
@@ -261,12 +197,6 @@ table.mgr-table tbody tr:hover { background-color: #FAFBFC; }
 
   .top-bar { margin-bottom: 16px; }
 
-  /* Reorder: stat cards (already above .mgr-columns) → chart →
-     All Projects → Employee IT Concerns. display:contents removes the
-     .mgr-col-left/.mgr-col-right wrapper divs from the box model
-     without touching the actual HTML — their children become direct
-     items of .mgr-columns, so `order` can freely interleave panels
-     that were originally split across the two desktop columns. */
   .mgr-columns { flex-direction: column; gap: 14px; }
   .mgr-col-left, .mgr-col-right { display: contents; }
   .mgr-col-right > .panel:has(.chart-grid) { order: 1; flex: 0 0 auto; }
@@ -281,10 +211,6 @@ table.mgr-table tbody tr:hover { background-color: #FAFBFC; }
   table.mgr-table thead { display: none; }
   table.mgr-table tbody { display: block; }
 
-  /* Project cards: a labeled grid instead of a dense table row, so
-     Owner/Priority/Progress/Status/Files/Actions each get their own
-     clearly readable spot regardless of screen width. Two cards per
-     row on wider tablets, one per row once space runs out. */
   #tableBody { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
   table.mgr-table tr {
     display: grid; grid-template-columns: 1fr 1fr auto auto; column-gap: 10px; row-gap: 10px; align-items: center;
@@ -311,15 +237,10 @@ table.mgr-table tbody tr:hover { background-color: #FAFBFC; }
   .pbar-wrap { width: 100%; }
   table.mgr-table td:nth-child(7), table.mgr-table td:nth-child(8) { padding: 0; }
 
-  /* Employee IT Concerns cards */
   table.mgr-table.mgr-table-compact { display: block; }
   table.mgr-table.mgr-table-compact thead { display: none; }
   #mgrRequestsTableBody { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
-  /* Grid instead of inline-block: inline-block wraps based on leftover
-     width on the current line, which is why fields could drift onto
-     the wrong line depending on content length. Grid gives every field
-     an exact row/column regardless of how much room its neighbors take
-     up. */
+
   table.mgr-table.mgr-table-compact tr {
     display: grid; grid-template-columns: 1fr 1fr; column-gap: 12px; row-gap: 8px;
     background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 0; padding: 14px 16px;
@@ -331,11 +252,6 @@ table.mgr-table tbody tr:hover { background-color: #FAFBFC; }
   table.mgr-table.mgr-table-compact td:nth-child(4) { grid-column: 1; grid-row: 3; }
   table.mgr-table.mgr-table-compact td:nth-child(5) { grid-column: 2; grid-row: 3; }
 
-  /* Request title + requester — forced to wrap fully and stay visible.
-     The base `.proj-name` rule (line-clamp:2 + overflow:hidden) and the
-     base table td rule (overflow:hidden) were both written for the
-     dense desktop table; on this stacked card there's no reason to
-     truncate a request title, so both get explicitly undone here. */
   table.mgr-table.mgr-table-compact td:first-child {
     font-size: 14.5px; font-weight: 600; color: var(--ink);
     white-space: normal; overflow: visible; text-overflow: clip;
@@ -347,7 +263,6 @@ table.mgr-table tbody tr:hover { background-color: #FAFBFC; }
   }
   table.mgr-table.mgr-table-compact td:first-child .req-requester { display: block; margin-top: 4px; color: var(--ink-soft); font-size: 12px; }
 
-  /* Issued / Resolved: labeled, placed in the grid's row 3 (see above) */
   table.mgr-table.mgr-table-compact td:nth-child(4),
   table.mgr-table.mgr-table-compact td:nth-child(5) {
     padding-top: 10px; border-top: 1px dashed var(--border);
@@ -370,10 +285,6 @@ table.mgr-table tbody tr:hover { background-color: #FAFBFC; }
   .view-modal-overlay, .modal-overlay { padding: 12px; }
 }
 
-/* ---------- PHONE breakpoint: nested inside the tablet/phone strategy
-   above. Same card layout, just tighter spacing/type and a single
-   card per row, since a phone screen has no room for the two-per-row
-   grid used on tablets. ---------- */
 @media (max-width: 680px) {
   .page { padding: 14px 12px 22px; }
   .top-bar { margin-bottom: 12px; }
@@ -390,11 +301,6 @@ table.mgr-table tbody tr:hover { background-color: #FAFBFC; }
 }
 
 @media print {
-
-  /* =========================================================
-     PRINT VISIBILITY
-     ========================================================= */
-
   .no-print {
     display: none !important;
   }
@@ -406,11 +312,6 @@ table.mgr-table tbody tr:hover { background-color: #FAFBFC; }
   .modal-overlay {
     display: none !important;
   }
-
-
-  /* =========================================================
-     PAGE SETUP
-     ========================================================= */
 
   @page {
     size: portrait;
@@ -431,15 +332,6 @@ table.mgr-table tbody tr:hover { background-color: #FAFBFC; }
     background: #fff !important;
   }
 
-
-  /* =========================================================
-     MAIN PRINT CONTAINERS
-     
-     IMPORTANT:
-     Remove viewport/fixed-height behavior when printing.
-     This prevents large empty spaces from being printed.
-     ========================================================= */
-
   .page,
   .fit-outer,
   .fit-inner {
@@ -457,29 +349,14 @@ table.mgr-table tbody tr:hover { background-color: #FAFBFC; }
     padding: 0 !important;
   }
 
-  /*
-     Do NOT use flexbox for the main print container.
-     Let the browser naturally flow the content from
-     one page to the next.
-  */
   .fit-inner {
     display: block !important;
   }
-
-
-  /* =========================================================
-     TOP BAR
-     ========================================================= */
 
   .top-bar {
     margin-top: 0 !important;
     margin-bottom: 6px !important;
   }
-
-
-  /* =========================================================
-     STATISTICS / CARDS
-     ========================================================= */
 
   .stat-grid {
     display: flex !important;
@@ -507,16 +384,6 @@ table.mgr-table tbody tr:hover { background-color: #FAFBFC; }
     font-size: 20px !important;
   }
 
-
-  /* =========================================================
-     CHARTS
-     ========================================================= */
-
-  /*
-     Give the chart enough height to render correctly,
-     but don't allow it to create a full viewport-sized area.
-  */
-
   .chart-box.full-width {
     width: 100% !important;
 
@@ -529,13 +396,6 @@ table.mgr-table tbody tr:hover { background-color: #FAFBFC; }
     break-inside: avoid !important;
     page-break-inside: avoid !important;
   }
-
-
-  /* =========================================================
-     TWO-COLUMN MANAGER LAYOUT
-     
-     On paper, make the columns flow vertically.
-     ========================================================= */
 
   .mgr-columns {
     display: block !important;
@@ -577,17 +437,6 @@ table.mgr-table tbody tr:hover { background-color: #FAFBFC; }
     overflow: visible !important;
   }
 
-
-  /* =========================================================
-     PANELS
-     
-     IMPORTANT:
-     Do NOT use break-inside: avoid on the whole panel.
-     
-     A large panel containing a table/chart must be allowed
-     to continue onto the next printed page.
-     ========================================================= */
-
   .panel {
     width: 100% !important;
 
@@ -601,9 +450,6 @@ table.mgr-table tbody tr:hover { background-color: #FAFBFC; }
 
     overflow: visible !important;
 
-    /*
-       Allow large panels to flow naturally between pages.
-    */
     break-inside: auto !important;
     page-break-inside: auto !important;
 
@@ -614,14 +460,6 @@ table.mgr-table tbody tr:hover { background-color: #FAFBFC; }
   .panel:hover {
     box-shadow: none !important;
   }
-
-
-  /* =========================================================
-     TABLE SCROLL CONTAINER
-     
-     Screen version may scroll.
-     Printed version must show everything.
-     ========================================================= */
 
   .table-scroll {
     width: 100% !important;
@@ -634,11 +472,6 @@ table.mgr-table tbody tr:hover { background-color: #FAFBFC; }
 
     position: static !important;
   }
-
-
-  /* =========================================================
-     TABLE
-     ========================================================= */
 
   table.mgr-table {
     width: 100% !important;
@@ -668,42 +501,18 @@ table.mgr-table tbody tr:hover { background-color: #FAFBFC; }
     vertical-align: middle !important;
   }
 
-  /*
-     Sticky table headers don't need sticky behavior
-     when printing.
-  */
-
   table.mgr-table th {
     position: static !important;
   }
-
-  /*
-     Repeat table header when table continues onto
-     another printed page.
-  */
 
   table.mgr-table thead {
     display: table-header-group !important;
   }
 
-  /*
-     Keep individual rows together.
-     This is better than preventing the entire panel
-     from breaking.
-  */
-
   table.mgr-table tbody tr {
     break-inside: avoid !important;
     page-break-inside: avoid !important;
   }
-
-
-  /* =========================================================
-     HIDE FILE / ACTION COLUMNS
-     
-     These are interactive elements and don't need to
-     appear on paper.
-     ========================================================= */
 
   table.mgr-table th:nth-child(7),
   table.mgr-table td:nth-child(7),
@@ -711,11 +520,6 @@ table.mgr-table tbody tr:hover { background-color: #FAFBFC; }
   table.mgr-table td:nth-child(8) {
     display: none !important;
   }
-
-
-  /* =========================================================
-     TABLE COLUMN WIDTHS
-     ========================================================= */
 
   table.mgr-table th:nth-child(1),
   table.mgr-table td:nth-child(1) {
@@ -742,11 +546,6 @@ table.mgr-table tbody tr:hover { background-color: #FAFBFC; }
     width: 12% !important;
   }
 
-
-  /* =========================================================
-     HIDDEN OWNER COLUMN
-     ========================================================= */
-
   .mgr-col-left .mgr-table th:nth-child(3),
   .mgr-col-left .mgr-table td:nth-child(3) {
     width: 0 !important;
@@ -759,11 +558,6 @@ table.mgr-table tbody tr:hover { background-color: #FAFBFC; }
 
     overflow: hidden !important;
   }
-
-
-  /* =========================================================
-     COMPACT TABLE
-     ========================================================= */
 
   table.mgr-table.mgr-table-compact {
     width: 100% !important;
@@ -795,11 +589,6 @@ table.mgr-table tbody tr:hover { background-color: #FAFBFC; }
     width: 15% !important;
   }
 
-
-  /* =========================================================
-     PROGRESS BAR
-     ========================================================= */
-
   .pbar-wrap {
     width: 100% !important;
 
@@ -816,18 +605,8 @@ table.mgr-table tbody tr:hover { background-color: #FAFBFC; }
     font-size: 9.5px !important;
   }
 
-
-  /* =========================================================
-     PROJECT TEXT
-     ========================================================= */
-
   .proj-name {
     font-size: 10.5px !important;
-
-    /*
-       Remove screen line clamping when printing.
-       This allows the complete project name to appear.
-    */
 
     -webkit-line-clamp: unset !important;
     line-clamp: unset !important;
@@ -849,11 +628,6 @@ table.mgr-table tbody tr:hover { background-color: #FAFBFC; }
     font-size: 9.5px !important;
   }
 
-
-  /* =========================================================
-     GENERAL CONTAINER CLEANUP
-     ========================================================= */
-
   .container,
   .container-fluid,
   .row {
@@ -866,16 +640,42 @@ table.mgr-table tbody tr:hover { background-color: #FAFBFC; }
     overflow: visible !important;
   }
 
-
-  /* =========================================================
-     REMOVE UNNECESSARY PAGE BREAKS
-     ========================================================= */
-
   .page-break,
   .page-break-before,
   .page-break-after {
     page-break-before: auto !important;
     page-break-after: auto !important;
   }
+}
 
+@media (max-width: 960px) {
+  #fitOuter { height: auto !important; }
+  #fitInner { transform: none !important; width: 100% !important; height: auto !important; }
+
+  .stat-grid { margin-bottom: 14px; }
+
+  #tableBody tr td:nth-child(4) { grid-column: 1 / -1; }
+
+  #mgrRequestsTableBody tr td:nth-child(-n+3) { border-top: none; }
+
+  .mgr-filter-bar { padding: 10px 12px; }
+  .mgr-filter-input { flex: 1 1 100%; }
+  .mgr-filter-select { flex: 1 1 0; min-width: 0; }
+
+  .modal-card { max-height: 92vh; }
+  .modal-head { flex-shrink: 0; }
+}
+
+@media (max-width: 680px) {
+  .page {
+    padding: 14px max(12px, env(safe-area-inset-right)) 22px max(12px, env(safe-area-inset-left));
+  }
+  .top-bar-right { width: 100%; justify-content: space-between; }
+
+  .stat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .stat-grid > :last-child:nth-child(odd) { grid-column: 1 / -1; }
+  .stat-card { min-width: 0; padding: 12px 14px; }
+  .stat-count { font-size: 22px; }
+
+  #tableBody, #mgrRequestsTableBody { grid-template-columns: minmax(0, 1fr); }
 }
